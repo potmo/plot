@@ -7,12 +7,12 @@ output += getIntro();
 //}
 
 var xOffset = 0;
-var yOffset = 5500;
+var yOffset = 0;
 var rotation = 0;
-var inDegrees = 0;
-var outDegrees = 0;
-var amplitude = 50;
-var radius = 10;
+var inDegrees = 41;
+var outDegrees = 41;
+var amplitude = 25;
+var radius = 3;
 var pivot = {
   x: 0,
   y: 0
@@ -21,21 +21,40 @@ var pivot = {
 var startPoint = rotatePointAroundPoint({x:xOffset, y:yOffset}, pivot, rotation);
 output += 'PU' + startPoint.x.toFixed(2) + ',' + startPoint.y.toFixed(2) + ';\n';
 
-for (var i = 0; i < 40; i++) {
-  var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, radius, (i % 2 == 0));
-  output += result.commands;
-  amplitude += 1;
+for (var j = 0; j < 40; j++) {
+  for (var i = 0; xOffset < 5000; i++) {
+    radius = 5 + inDegrees * 1.5;
+    var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, radius, (i % 2 == 0));
+    output += result.commands;
+    outDegrees = inDegrees;
+    inDegrees = Math.min(inDegrees, 45);
+    xOffset += result.travel;
+  }
+  //output += 'PU' + result.pen.x.toFixed(2) + ',' + result.pen.y.toFixed(2) + ';\n';
+  yOffset += 180;
+  xOffset = 0;
+  radius = 3;
+  inDegrees -= 1;
   outDegrees = inDegrees;
-  radius += 1.5;
-  inDegrees += 3;
-  inDegrees = Math.min(inDegrees, 45);
-  xOffset += result.travel;
+  amplitude += 1.5;
+
 }
 
 
 output += getOutro();
 
 console.log(output);
+
+
+var fs = require('fs');
+fs.writeFile("output.hpgl", output, function(err) {
+  if(err) {
+    return console.log(err);
+  }
+
+  console.log("saved output.hpgl");
+});
+
 
 function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, radius, flip) {
 
@@ -96,13 +115,14 @@ function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amp
   var circle = rotatePointAroundPoint(circle, pivot, rotation);
 
   var output = '';
-  //output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
+  output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
   output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
   output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
-  //output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
+  output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   return {
     commands: output,
-    travel: travel
+    travel: travel,
+    pen: { x: p3.x, y: p3.y }
   };
 }
 
