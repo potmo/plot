@@ -3,18 +3,37 @@ var Canvas = require('canvas'),
     fs = require('fs');
 
 
+console.log("loading image")
+var image = loadImage('../lenna.png')
+
+
+var sample = function(x, y, width, height ){
+
+  // image width in pixel coordinates
+  var imageWidth = image.width;
+  var imageHeight = image.height;
+
+  var scale = width / imageWidth;
+  var sampleX = x / scale;
+  var sampleY = y / scale;
+
+  var color = getBlueChannelPixel(image, sampleX, imageHeight - sampleY);
+  var strength = 1.0 - color / 256;
+  return strength;
+}
+
 
 var output = '';
 output += getIntro();
 //output += getGrayscale();
-output += getPixels(45, 4); // blue
-output += getPixels(15, 2); // red
-output += getPixels(75, 1); // black
+output += getPixels(45, 4, sample); // blue
+output += getPixels(15, 2, sample); // red
+output += getPixels(75, 1, sample); // black
 output += getOutro();
 printOutputToFile(output, '../output.hpgl');
 
 
-function getPixels(rotation, color) {
+function getPixels(rotation, color, sample) {
 
   var output = "";
   var xOffset = 0;
@@ -30,20 +49,12 @@ function getPixels(rotation, color) {
   var outputWidth = 11040.0;
   var outputHeight = 11040.0;
 
-  console.log("loading image")
-  var image = loadImage('../lenna.png')
-
-  // image width in pixel coordinates
-  var imageWidth = image.width;
-  var imageHeight = image.height;
 
   // side of square in raster coordinates
   var sideOfRotatedSquare = getSideLengthOfRotatedSquareInSquare(rotation, outputWidth);
 
   // calculate the offset that the image needs to be moved to not end up outside the box
   var yOffsetToFit = cos(rotation) * sideOfRotatedSquare;
-
-  scale = outputWidth / imageWidth;
 
   var strength = 0;
 
@@ -64,10 +75,8 @@ function getPixels(rotation, color) {
     // TODO: Calculate this for all positions before drawing instead by getting the scaled position in the image
 
       // convert the local color-raster coordinates to image coordinates
-      var sampleX = result.pen.x / scale;
-      var sampleY = result.pen.y / scale;
-      var color = getBlueChannelPixel(image, sampleX, imageHeight - sampleY);
-      strength = 1.0 - color / 256;
+      strength = sample(result.pen.x, result.pen.y, outputWidth, outputHeight);
+
 
     }
     yOffset += 180;
