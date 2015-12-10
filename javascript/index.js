@@ -1,62 +1,120 @@
+var Canvas = require('canvas'),
+    Image = Canvas.Image,
+    fs = require('fs');
+
+
+
 var output = '';
 output += getIntro();
-//output += getPlot();
-//output += getWedge2(1000, 2000, 10, 10, 100);
-//for (var i = 0; i < 10; i++) {
-//  output += getWedge3(8000, 0, 5 * i, 10, 10, 1000, 100);
-//}
+//output += getGrayscale();
+output += getPixels(45, 4); // blue
+output += getPixels(15, 2); // red
+output += getPixels(75, 1); // black
+output += getOutro();
+printOutputToFile(output, '../output.hpgl');
 
-var xOffset = 0;
-var yOffset = 0;
-var rotation = 0;
-var inDegrees = 41;
-var outDegrees = 41;
-var amplitude = 25;
-var radius = 3;
-var pivot = {
-  x: 0,
-  y: 0
-};
 
-var startPoint = rotatePointAroundPoint({x:xOffset, y:yOffset}, pivot, rotation);
-output += 'PU' + startPoint.x.toFixed(2) + ',' + startPoint.y.toFixed(2) + ';\n';
+function getPixels(rotation, color) {
 
-for (var j = 0; j < 40; j++) {
-  for (var i = 0; xOffset < 5000; i++) {
-    radius = 5 + inDegrees * 1.5;
-    var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, radius, (i % 2 == 0));
-    output += result.commands;
-    outDegrees = inDegrees;
-    inDegrees = Math.min(inDegrees, 45);
-    xOffset += result.travel;
+  var output = "";
+  var xOffset = 0;
+  var yOffset = 0;
+  var inDegrees = 0;
+  var outDegrees = 0;
+  var amplitude = 25;
+  var pivot = {
+    x: 0,
+    y: 0
+  };
+
+  var outputWidth = 11040.0;
+  var outputHeight = 11040.0;
+
+  console.log("loading image")
+  var image = loadImage('../lenna.png')
+
+  // image width in pixel coordinates
+  var imageWidth = image.width;
+  var imageHeight = image.height;
+
+  // side of square in raster coordinates
+  var sideOfRotatedSquare = getSideLengthOfRotatedSquareInSquare(rotation, outputWidth);
+
+  // calculate the offset that the image needs to be moved to not end up outside the box
+  var yOffsetToFit = cos(rotation) * sideOfRotatedSquare;
+
+  scale = outputWidth / imageWidth;
+
+  var strength = 0;
+
+  pivot.y = yOffsetToFit;
+
+  output += 'SP'+color+';\n'; // blue
+
+  // The x offset and yOffset is in color-local raster coordinates
+  for (var j = 0; yOffset < sideOfRotatedSquare; j++){
+    for (var i = 0; xOffset < sideOfRotatedSquare; i++) {
+      var flip = i % 2 == 0;
+      var newLine = i == 0;
+      var result = drawPixel(xOffset, yOffset + yOffsetToFit, -rotation-90, pivot, inDegrees, flip, newLine, strength);
+      inDegrees = result.outDegrees;
+      xOffset += result.travel;
+      output += result.commands;
+
+    // TODO: Calculate this for all positions before drawing instead by getting the scaled position in the image
+
+      // convert the local color-raster coordinates to image coordinates
+      var sampleX = result.pen.x / scale;
+      var sampleY = result.pen.y / scale;
+      var color = getBlueChannelPixel(image, sampleX, imageHeight - sampleY);
+      strength = 1.0 - color / 256;
+
+    }
+    yOffset += 180;
+    xOffset = 0;
   }
-  //output += 'PU' + result.pen.x.toFixed(2) + ',' + result.pen.y.toFixed(2) + ';\n';
-  yOffset += 180;
-  xOffset = 0;
-  radius = 3;
-  inDegrees -= 1;
-  outDegrees = inDegrees;
-  amplitude += 1.5;
 
+  console.log('side of rotated square %d', sideOfRotatedSquare);
+  console.log('y offset %d', yOffsetToFit);
+  output += drawBox(0, 0, outputWidth, 0, 2);
+  output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, 3);
+
+  return output;
+}
+
+function drawBox(x, y, side, rotation, color) {
+  var output = '';
+  var ax = x;
+  var ay = y;
+  var bx = ax + cos(rotation) * side;
+  var by = ay + sin(rotation) * side;
+  var cx = bx + cos(rotation + 90) * side;
+  var cy = by + sin(rotation + 90) * side;
+  var dx = cx + cos(rotation + 180) * side;
+  var dy = cy + sin(rotation + 180) * side;
+
+  output += 'SP'+color+';\n'
+  output += 'PU' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
+  output += 'PD' + bx.toFixed(2) + ',' + by.toFixed(2) + ';\n';
+  output += 'PD' + cx.toFixed(2) + ',' + cy.toFixed(2) + ';\n';
+  output += 'PD' + dx.toFixed(2) + ',' + dy.toFixed(2) + ';\n';
+  output += 'PD' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
+  output += 'SP1;\n'
+
+  return output;
+}
+
+function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
+  var amplitude = 25 + 60 * strength;
+  var outDegrees = 45 - 45 * strength;
+  var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine);
+  return result;
 }
 
 
-output += getOutro();
+function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine) {
 
-console.log(output);
-
-
-var fs = require('fs');
-fs.writeFile("output.hpgl", output, function(err) {
-  if(err) {
-    return console.log(err);
-  }
-
-  console.log("saved output.hpgl");
-});
-
-
-function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, radius, flip) {
+  var radius = 5 + inDegrees * 1.5;
 
   var arcDegrees = (180 - 90 - inDegrees) + (180 - 90 - outDegrees);
 
@@ -115,14 +173,15 @@ function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amp
   var circle = rotatePointAroundPoint(circle, pivot, rotation);
 
   var output = '';
-  output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
+  if (newLine) output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
   output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
   output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
-  output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
+  // output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   return {
     commands: output,
     travel: travel,
-    pen: { x: p3.x, y: p3.y }
+    pen: { x: p3.x, y: p3.y },
+    outDegrees: outDegrees
   };
 }
 
@@ -136,8 +195,8 @@ function flipPointVertically(point, pivot) {
 }
 
 function rotatePointAroundPoint(point, pivot, degrees) {
-  var s = Math.sin(toRads(-degrees));
-  var c = Math.cos(toRads(-degrees));
+  var s = sin(-degrees);
+  var c = cos(-degrees);
 
   // translate to origin
   var tx = point.x - pivot.x;
@@ -155,75 +214,6 @@ function rotatePointAroundPoint(point, pivot, degrees) {
     x: tx,
     y: ty
   };
-}
-
-function getWedge2(xOffset, yOffset, inDegrees, outDegrees, amplitude) {
-  var output = '';
-  var leftPeakCorner = 180 - 90 - inDegrees;
-  var leftLegLength = amplitude / Math.sin(toRads(leftPeakCorner));
-
-  var rightPeakCorner = 180 - 90 - outDegrees;
-  var rightLegLength = amplitude / Math.sin(toRads(rightPeakCorner));
-
-  var arcDegrees = (180 - 90 - inDegrees) + (180 - 90 - outDegrees)
-
-  var x0 = xOffset;
-  var y0 = yOffset;
-
-  var x1 = x0 + cos(inDegrees) * leftLegLength / 2;
-  var y1 = y0 + sin(inDegrees) * leftLegLength / 2;
-
-  var x2 = x0 + cos(inDegrees) * leftLegLength;
-  var y2 = y0 + sin(inDegrees) * leftLegLength;
-
-  var x3 = x2 + cos(180 - outDegrees) * rightLegLength / 2;
-  var y3 = y2 + sin(180 - outDegrees) * rightLegLength / 2;
-
-  var arcx = x1 + cos(inDegrees + 90) * (leftLegLength - amplitude);
-  var arcy = y1 + sin(inDegrees + 90) * (leftLegLength - amplitude);
-
-  var x4 = x2 + cos(180 - outDegrees) * rightLegLength;
-  var y4 = y2 + sin(180 - outDegrees) * rightLegLength;
-
-  var incenter = findIncenter(x1, y1, x2, y2, x3, y3);
-  var incenterRadius = findIncenterRadius(x1, y1, x2, y2, x3, y3);
-
-  var leftTangentX = incenter.x + cos(inDegrees - 90) * incenterRadius;
-  var leftTangentY = incenter.y + sin(inDegrees - 90) * incenterRadius;
-
-  var rightTangentX = incenter.x + cos(180 - outDegrees - 90) * incenterRadius;
-  var rightTangentY = incenter.y + sin(180 - outDegrees - 90) * incenterRadius;
-
-  //output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-  //output += 'PD;\n';
-  //output += 'CI20,5;\n';
-  //output += 'PD' + x1.toFixed(2) + ',' + y1.toFixed(2) + ';\n';
-  //output += 'CI20,5;\n';
-  //output += 'PD' + x2.toFixed(2) + ',' + y2.toFixed(2) + ';\n';
-  //output += 'CI20,5;\n';
-  //output += 'PD' + x3.toFixed(2) + ',' + y3.toFixed(2) + ';\n';
-  //output += 'CI20,5;\n';
-  //output += 'PD' + x4.toFixed(2) + ',' + y4.toFixed(2) + ';\n';
-  //output += 'CI20,5;\n';
-  //output += 'PU' + incenter.x.toFixed(2) + ',' + incenter.y.toFixed(2) + ';\n';
-  //output += 'PD;\n';
-  //output += 'CI' + incenterRadius.toFixed(2) + ',5;\n';
-  //output += 'PU' + leftTangentX.toFixed(2) + ',' + leftTangentY.toFixed(2) + ';\n';
-  //output += 'PD;\n';
-  //output += 'CI20,5;\n';
-  //output += 'PU' + rightTangentX.toFixed(2) + ',' + rightTangentY.toFixed(2) + ';\n';
-  //output += 'PD;\n';
-  //output += 'CI20,5;\n';
-  //output += 'PU' + leftTangentX.toFixed(2) + ',' + leftTangentY.toFixed(2) + ';\n';
-  //output += 'PD;\n';
-  //output += 'AA' + incenter.x.toFixed(2) + ',' + incenter.y.toFixed(2) + ',' + (-1 * arcDegrees).toFixed(2) + ',5;\n';
-
-  output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-  output += 'PD' + leftTangentX.toFixed(2) + ',' + leftTangentY.toFixed(2) + ';\n';
-  output += 'AA' + incenter.x.toFixed(2) + ',' + incenter.y.toFixed(2) + ',' + (-1 * arcDegrees).toFixed(2) + ',5;\n';
-  output += 'PD' + x4.toFixed(2) + ',' + y4.toFixed(2) + ';\n';
-  return output;
-
 }
 
 function findIncenter(Ax, Ay, Bx, By, Cx, Cy) {
@@ -261,78 +251,6 @@ function getDistance(Ax, Ay, Bx, By) {
   return Math.sqrt(Math.pow(Bx - Ax, 2) + Math.pow(By - Ay, 2));
 }
 
-// in degrees is clockwise from north. outdegrees is counter clockwise from south
-function getWedge(xOffset, yOffset, inDegrees, outDegrees, amplitude) {
-  var output = '';
-  var arcDegrees = (180 - 90 - inDegrees) + (180 - 90 - outDegrees)
-  var arcSpacing = (cos(inDegrees) + cos(180 - outDegrees)) * amplitude / 2;
-
-  var x0 = xOffset;
-  var y0 = yOffset;
-
-  var x1 = x0 + cos(inDegrees) * amplitude / 2;
-  var y1 = y0 + sin(inDegrees) * amplitude / 2;
-
-  var arcx = x1 + cos(inDegrees + 90) * arcSpacing / 2;
-  var arcy = y1 + sin(inDegrees + 90) * arcSpacing / 2;
-
-  var x2 = x1 + arcSpacing;
-  var y2 = y1;
-
-  var x3 = x1 + arcSpacing + cos(180 - outDegrees) * amplitude / 2;
-  var y3 = y1 + sin(180 - outDegrees) * amplitude / 2;
-
-  /*
-    output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-    output += 'PD' + (x0 + cos(0) * amplitude / 2).toFixed(2) + ',' + (y0 + sin(0) * amplitude / 2).toFixed(2) + ';\n';
-
-    output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-    output += 'PD' + (x0 + cos(10) * amplitude / 2).toFixed(2) + ',' + (y0 + sin(10) * amplitude / 2).toFixed(2) + ';\n';
-
-    output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-    output += 'PD' + (x0 + cos(20) * amplitude / 2).toFixed(2) + ',' + (y0 + sin(20) * amplitude / 2).toFixed(2) + ';\n';
-
-    output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-    output += 'PD' + (x0 + cos(30) * amplitude / 2).toFixed(2) + ',' + (y0 + sin(30) * amplitude / 2).toFixed(2) + ';\n';
-
-    output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-    output += 'PD' + (x0 + cos(40) * amplitude / 2).toFixed(2) + ',' + (y0 + sin(40) * amplitude / 2).toFixed(2) + ';\n';
-  */
-  output += 'PU' + x0.toFixed(2) + ',' + y0.toFixed(2) + ';\n';
-  output += 'PD' + x1.toFixed(2) + ',' + y1.toFixed(2) + ';\n';
-  //output += 'PD' + x2.toFixed(2) + ',' + y2.toFixed(2) + ';\n';
-  output += 'AA' + arcx.toFixed(2) + ',' + arcy.toFixed(2) + ',' + (-1 * arcDegrees).toFixed(2) + ',5;\n';
-  output += 'PD' + x3.toFixed(2) + ',' + y3.toFixed(2) + ';\n';
-
-  output += 'PU' + arcx.toFixed(2) + ',' + arcy.toFixed(2) + ';\n';
-  output += 'CI10;\n';
-
-  return output;
-
-}
-
-function getPlot() {
-
-  var xOffset = 8000;
-  var yOffset = 3000;
-  var s = 40;
-  var output = 'PU' + xOffset + ',' + yOffset + ';\n';
-  for (i = 0; i < 30; i++) {
-    // draw line
-    output += 'PD' + (xOffset + i * s) + ',' + (yOffset + s) + ';\n';
-    // draw arc
-    output += 'AA' + (xOffset + (i + 0.25) * s) + ',' + (yOffset + s) + ',' + -180 + ',' + 5 + ';\n';
-    // draw line
-    output += 'PD' + (xOffset + (i + 0.5) * s) + ',' + (yOffset - s * i) + ';\n';
-    //draw arc
-    output += 'AA' + (xOffset + (i + 0.75) * s) + ',' + (yOffset - s * i) + ',' + 180 + ',' + 5 + ';\n';
-    // draw line
-    output += 'PD' + (xOffset + (i + 1) * s) + ',' + (yOffset) + ';\n';
-
-  }
-  return output;
-}
-
 function getIntro() {
   var output = '';
   output += 'IN;\n'; // initialize
@@ -360,4 +278,107 @@ function sin(inDegrees) {
 
 function toRads(inDegreess) {
   return inDegreess * Math.PI / 180;
+}
+
+
+function getSideLengthOfRotatedSquareInSquare(angle, containerSideLength) {
+  return containerSideLength / (cos(angle) + sin(angle) );
+}
+
+function loadImage(file) {
+    var canvas,
+        context,
+        img,
+        fileBuffer = fs.readFileSync(__dirname + '/' + file);
+
+    img = new Image;
+
+    img.src = fileBuffer;
+
+    canvas = new Canvas(img.width, img.height);
+    context = canvas.getContext('2d');
+
+    context.drawImage(img, 0, 0, img.width, img.height);
+    return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function setPixel(imageData, x, y, argb) {
+
+    var i = getIndexFromCoordinate(imageData, x, y);
+
+    imageData.data[i + 0] = (argb & 0x00ff0000) >>> 16;
+    imageData.data[i + 1] = (argb & 0x0000ff00) >>> 8;
+    imageData.data[i + 2] = (argb & 0x000000ff);
+    imageData.data[i + 3] = (argb & 0xff000000) >>> 24;
+
+}
+
+function getPixel(imageData, x, y) {
+    var i = getIndexFromCoordinate(imageData, x, y);
+    //return ARGB color
+    return ((imageData.data[i + 3] << 24) | (imageData.data[i + 0] << 16) | (imageData.data[i + 1] << 8) | imageData.data[i + 2]) >>> 0;
+}
+
+function getBlueChannelPixel(imageData, x, y) {
+    var i = getIndexFromCoordinate(imageData, x, y);
+    return imageData.data[i + 2] >>> 0;
+}
+
+function setGrayscale(imageData, x, y, b) {
+    var i = getIndexFromCoordinate(imageData, x, y);
+
+    imageData.data[i + 0] = b >>> 0 & 0xff;
+    imageData.data[i + 1] = b >>> 0 & 0xff;
+    imageData.data[i + 2] = b >>> 0 & 0xff;
+    //imageData.data[i + 3] = b >>> 0 & 0xff;
+}
+
+function getIndexFromCoordinate(imageData, x, y) {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    return (imageData.width * y + x) * 4;
+}
+
+function printOutputToFile(output, file) {
+  fs.writeFile(__dirname + '/' + file, output, function(err) {
+    if(err) {
+      return console.log(err);
+    }
+    console.log("saved " + file);
+  });
+}
+
+
+
+function getGrayscale() {
+  var output = "";
+  var xOffset = 0;
+  var yOffset = 0;
+  var rotation = 0;
+  var inDegrees = 41;
+  var outDegrees = 41;
+  var amplitude = 25;
+  var pivot = {
+    x: 0,
+    y: 0
+  };
+
+  for (var j = 0; j < 40; j++) {
+    for (var i = 0; xOffset < 5000; i++) {
+      var newLine  = i == 0;
+
+      var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, ((i) % 2 == 0), newLine);
+      output += result.commands;
+      outDegrees = inDegrees;
+      inDegrees = Math.min(inDegrees, 45);
+      xOffset += result.travel;
+    }
+    yOffset += 180;
+    xOffset = 0;
+    inDegrees -= 1;
+    outDegrees = inDegrees;
+    amplitude += 1.5;
+  }
+
+  return output;
 }
