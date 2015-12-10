@@ -17,18 +17,33 @@ var sample = function(x, y, width, height ){
   var sampleX = x / scale;
   var sampleY = y / scale;
 
-  var color = getBlueChannelPixel(image, sampleX, imageHeight - sampleY);
-  var strength = 1.0 - color / 256;
-  return strength;
+  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+  var cmyk = ARGBtoCMYK(argb);
+
+  return cmyk;
 }
 
+var sampleCyan = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.c;
+}
+
+var sampleBlack = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.k;
+}
+
+var sampleMagenta = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.m;
+}
 
 var output = '';
 output += getIntro();
 //output += getGrayscale();
-output += getPixels(45, 4, sample); // blue
-output += getPixels(15, 2, sample); // red
-output += getPixels(75, 1, sample); // black
+output += getPixels(45, 4, sampleMagenta); // blue
+output += getPixels(15, 2, sampleCyan); // red
+output += getPixels(75, 1, sampleBlack); // black
 output += getOutro();
 printOutputToFile(output, '../output.hpgl');
 
@@ -77,16 +92,13 @@ function getPixels(rotation, color, sample) {
       // convert the local color-raster coordinates to image coordinates
       strength = sample(result.pen.x, result.pen.y, outputWidth, outputHeight);
 
-
     }
     yOffset += 180;
     xOffset = 0;
   }
 
-  console.log('side of rotated square %d', sideOfRotatedSquare);
-  console.log('y offset %d', yOffsetToFit);
-  output += drawBox(0, 0, outputWidth, 0, 2);
-  output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, 3);
+  //output += drawBox(0, 0, outputWidth, 0, 2);
+  //output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, 3);
 
   return output;
 }
@@ -115,7 +127,7 @@ function drawBox(x, y, side, rotation, color) {
 
 function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
   var amplitude = 25 + 60 * strength;
-  var outDegrees = 45 - 45 * strength;
+  var outDegrees = 30 - 30 * strength;
   var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine);
   return result;
 }
@@ -123,7 +135,7 @@ function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, 
 
 function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine) {
 
-  var radius = 5 + inDegrees * 1.5;
+  var radius = 3 + inDegrees * 1.5;
 
   var arcDegrees = (180 - 90 - inDegrees) + (180 - 90 - outDegrees);
 
@@ -327,6 +339,65 @@ function getPixel(imageData, x, y) {
     //return ARGB color
     return ((imageData.data[i + 3] << 24) | (imageData.data[i + 0] << 16) | (imageData.data[i + 1] << 8) | imageData.data[i + 2]) >>> 0;
 }
+
+function getPixelARGB(imageData, x, y) {
+    var i = getIndexFromCoordinate(imageData, x, y);
+    //return ARGB color
+    return {
+      a: imageData.data[i + 3] >>> 0,
+      r: imageData.data[i + 0] >>> 0,
+      g: imageData.data[i + 1] >>> 0,
+      b: imageData.data[i + 2] >>> 0
+    }
+}
+
+
+function ARGBtoCMYK(argb) {
+  cyan = 1.0 - argb.r/255;
+  magenta = 1.0 - argb.g/255;
+  yellow = 1.0 - argb.b/255;
+
+  key = Math.min(cyan,magenta,yellow) * 0.8;
+
+  //avoid division by zero
+  if (key == 1.0){
+    cyan = 0;
+    magenta = 0;
+    yellow = 0;
+    key = 1;
+  }
+
+  cyan = (cyan - key) / (1 - key);
+  magenta = (magenta - key) / (1 - key);
+  yellow = (yellow - key) / (1 - key);
+
+  return {
+    c: cyan,
+    m: magenta,
+    y: yellow,
+    k: key
+  }
+}
+
+/*
+function ARGBtoCMYK(argb) {
+  var r = argb.r / 255;
+  var g = argb.g / 255;
+  var b = argb.b / 255;
+
+  var key = 1 - Math.max(r, g, b);
+  var cyan = (1 - r - key) / (1 - key);
+  var magenta = (1 - g - key) / (1 - key);
+  var yellow = (1 - b - key) / (1 - key);
+
+  return {
+    c: cyan,
+    m: magenta,
+    y: yellow,
+    k: key
+  }
+}
+*/
 
 function getBlueChannelPixel(imageData, x, y) {
     var i = getIndexFromCoordinate(imageData, x, y);
