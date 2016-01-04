@@ -4,7 +4,7 @@ var Canvas = require('canvas'),
 
 
 console.log("loading image")
-var image = loadImage('../lenna.png')
+var image = loadImage('../nisse2.png')
 
 
 var sample = function(x, y, width, height ){
@@ -41,8 +41,8 @@ var sampleMagenta = function(x, y, width, height){
 var output = '';
 output += getIntro();
 //output += getGrayscale();
-output += getPixels(45, 4, sampleMagenta); // blue
-output += getPixels(15, 2, sampleCyan); // red
+output += getPixels(45, 1, sampleBlack); // blue
+output += getPixels(15, 2, sampleMagenta); // red
 output += getPixels(75, 1, sampleBlack); // black
 output += getOutro();
 printOutputToFile(output, '../output.hpgl');
@@ -61,8 +61,8 @@ function getPixels(rotation, color, sample) {
     y: 0
   };
 
-  var outputWidth = 11040.0;
-  var outputHeight = 11040.0;
+  var outputWidth = 10000.0;
+  var outputHeight = 10000.0;
 
 
   // side of square in raster coordinates
@@ -85,12 +85,17 @@ function getPixels(rotation, color, sample) {
       var result = drawPixel(xOffset, yOffset + yOffsetToFit, -rotation-90, pivot, inDegrees, flip, newLine, strength);
       inDegrees = result.outDegrees;
       xOffset += result.travel;
+
       output += result.commands;
+
+
 
     // TODO: Calculate this for all positions before drawing instead by getting the scaled position in the image
 
       // convert the local color-raster coordinates to image coordinates
       strength = sample(result.pen.x, result.pen.y, outputWidth, outputHeight);
+
+      //strength = Math.min(0.8,  strength);
 
     }
     yOffset += 180;
@@ -126,14 +131,16 @@ function drawBox(x, y, side, rotation, color) {
 }
 
 function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
-  var amplitude = 25 + 60 * strength;
-  var outDegrees = 30 - 30 * strength;
-  var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine);
+  if (newLine) strength = 0;
+  var amplitude = 25 + 90 * strength;
+  var outDegrees = 20 - 19 * strength;
+  var muted = strength <= 0.1;
+  var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted);
   return result;
 }
 
 
-function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine) {
+function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted) {
 
   var radius = 3 + inDegrees * 1.5;
 
@@ -195,8 +202,13 @@ function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amp
 
   var output = '';
   if (newLine) output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
-  output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
-  output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
+
+  if (!muted){
+    output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
+    output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
+  }else{
+   output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n'; 
+  }
   // output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   return {
     commands: output,
@@ -357,7 +369,14 @@ function ARGBtoCMYK(argb) {
   magenta = 1.0 - argb.g/255;
   yellow = 1.0 - argb.b/255;
 
-  key = Math.min(cyan,magenta,yellow) * 0.8;
+  if (argb.a === 0){
+    cyan = magenta = yellow = 0.0;
+  }
+
+
+  key = Math.min(cyan,magenta,yellow) * 0.9;
+
+  //key = Math.max(key, 0.2);
 
   //avoid division by zero
   if (key == 1.0){
