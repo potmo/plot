@@ -4,7 +4,7 @@ var Canvas = require('canvas'),
 
 
 console.log("loading image")
-var image = loadImage('../nisse2.png')
+var image = loadImage('../explotion01.png')
 
 
 var sample = function(x, y, width, height ){
@@ -41,9 +41,9 @@ var sampleMagenta = function(x, y, width, height){
 var output = '';
 output += getIntro();
 //output += getGrayscale();
-output += getPixels(45, 1, sampleBlack); // blue
-output += getPixels(15, 2, sampleMagenta); // red
-output += getPixels(75, 1, sampleBlack); // black
+output += getPixels(45, 4, sampleCyan); // blue
+//output += getPixels(15, 2, sampleMagenta); // red
+//output += getPixels(75, 1, sampleBlack); // black
 output += getOutro();
 printOutputToFile(output, '../output.hpgl');
 
@@ -70,10 +70,14 @@ function getPixels(rotation, color, sample) {
 
   // calculate the offset that the image needs to be moved to not end up outside the box
   var yOffsetToFit = cos(rotation) * sideOfRotatedSquare;
+  var xOffsetToFit = (16158 - outputWidth) / 2.0;
 
   var strength = 0;
 
   pivot.y = yOffsetToFit;
+
+  //output += drawBox(0, 0, outputWidth, 0, 2);
+  //output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, color);
 
   output += 'SP'+color+';\n'; // blue
 
@@ -98,12 +102,9 @@ function getPixels(rotation, color, sample) {
       //strength = Math.min(0.8,  strength);
 
     }
-    yOffset += 180;
+    yOffset += 90;
     xOffset = 0;
   }
-
-  //output += drawBox(0, 0, outputWidth, 0, 2);
-  //output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, 3);
 
   return output;
 }
@@ -132,9 +133,9 @@ function drawBox(x, y, side, rotation, color) {
 
 function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
   if (newLine) strength = 0;
-  var amplitude = 25 + 90 * strength;
-  var outDegrees = 20 - 19 * strength;
-  var muted = strength <= 0.1;
+  var amplitude = 12 + 80 * strength;
+  var outDegrees = 30 - 29 * strength;
+  var muted = strength <= 0.05;
   var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted);
   return result;
 }
@@ -207,7 +208,7 @@ function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amp
     output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
     output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
   }else{
-   output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n'; 
+      output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   }
   // output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   return {
