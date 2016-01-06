@@ -38,12 +38,53 @@ var sampleMagenta = function(x, y, width, height){
   return cmyk.m;
 }
 
+var sampleLuminocity = function(x,y, width, height){
+  var imageWidth = image.width;
+  var imageHeight = image.height;
+
+  var scale = width / imageWidth;
+  var sampleX = x / scale;
+  var sampleY = y / scale;
+
+  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+
+  // get weighted average of the rgb taking human color peception into account
+  var luminocity = 0.21 * argb.r + 0.72 * argb.g + 0.07 * argb.b;
+
+  return 1.0 - luminocity / 255.0;
+}
+
 var output = '';
 output += getIntro();
 //output += getGrayscale();
-output += getPixels(45, 4, sampleCyan); // blue
+//output += getPixels(45, 4, sampleCyan); // blue
 //output += getPixels(15, 2, sampleMagenta); // red
 //output += getPixels(75, 1, sampleBlack); // black
+
+output += getPixels(45, 1, sampleLuminocity); // black
+output += getPixels(15, 4, sampleCyan); // blue
+output += getPixels(75, 2, sampleMagenta); // red
+
+
+//output += getPixels(5, 1, sampleLuminocity); // black
+//output += getPixels(10, 1, sampleLuminocity); // black
+//output += getPixels(15, 1, sampleLuminocity); // black
+//output += getPixels(20, 1, sampleLuminocity); // black
+//output += getPixels(25, 1, sampleLuminocity); // black
+//output += getPixels(30, 1, sampleLuminocity); // black
+//output += getPixels(35, 1, sampleLuminocity); // black
+//output += getPixels(40, 1, sampleLuminocity); // black
+//output += getPixels(45, 1, sampleLuminocity); // black
+//output += getPixels(50, 1, sampleLuminocity); // black
+//output += getPixels(55, 1, sampleLuminocity); // black
+//output += getPixels(60, 1, sampleLuminocity); // black
+//output += getPixels(65, 1, sampleLuminocity); // black
+//output += getPixels(70, 1, sampleLuminocity); // black
+//output += getPixels(75, 1, sampleLuminocity); // black
+//output += getPixels(80, 1, sampleLuminocity); // black
+//output += getPixels(85, 1, sampleLuminocity); // black
+
+
 output += getOutro();
 printOutputToFile(output, '../output.hpgl');
 
@@ -102,7 +143,7 @@ function getPixels(rotation, color, sample) {
       //strength = Math.min(0.8,  strength);
 
     }
-    yOffset += 90;
+    yOffset += 120;
     xOffset = 0;
   }
 
@@ -133,8 +174,8 @@ function drawBox(x, y, side, rotation, color) {
 
 function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
   if (newLine) strength = 0;
-  var amplitude = 12 + 80 * strength;
-  var outDegrees = 30 - 29 * strength;
+  var amplitude = 10+ 80 * strength * strength;
+  var outDegrees = 4 + 10 * (1.0 - strength * strength);
   var muted = strength <= 0.05;
   var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted);
   return result;
