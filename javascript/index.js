@@ -4,7 +4,7 @@ var Canvas = require('canvas'),
 
 
 console.log("loading image")
-var image = loadImage('../explotion01.png')
+var image = loadImage('../guy.jpg')
 
 
 var sample = function(x, y, width, height ){
@@ -61,9 +61,10 @@ output += getIntro();
 //output += getPixels(15, 2, sampleMagenta); // red
 //output += getPixels(75, 1, sampleBlack); // black
 
-output += getPixels(45, 1, sampleLuminocity); // black
-output += getPixels(15, 4, sampleCyan); // blue
-output += getPixels(75, 2, sampleMagenta); // red
+
+output += getPixels(45, 4, sampleCyan); // blue
+output += getPixels(15, 2, sampleMagenta); // red
+output += getPixels(75, 1, sampleLuminocity); // black
 
 
 //output += getPixels(5, 1, sampleLuminocity); // black
@@ -91,9 +92,12 @@ printOutputToFile(output, '../output.hpgl');
 
 function getPixels(rotation, color, sample) {
 
+  var outputWidth = 15000.0;
+  var outputHeight = 10000.0;
+
   var output = "";
-  var xOffset = 0;
-  var yOffset = 0;
+  var xOffset = -outputWidth;
+  var yOffset = -outputHeight;
   var inDegrees = 0;
   var outDegrees = 0;
   var amplitude = 25;
@@ -102,8 +106,7 @@ function getPixels(rotation, color, sample) {
     y: 0
   };
 
-  var outputWidth = 10000.0;
-  var outputHeight = 10000.0;
+  
 
 
   // side of square in raster coordinates
@@ -123,11 +126,23 @@ function getPixels(rotation, color, sample) {
   output += 'SP'+color+';\n'; // blue
 
   // The x offset and yOffset is in color-local raster coordinates
-  for (var j = 0; yOffset < sideOfRotatedSquare; j++){
-    for (var i = 0; xOffset < sideOfRotatedSquare; i++) {
-      var flip = i % 2 == 0;
-      var newLine = i == 0;
-      var result = drawPixel(xOffset, yOffset + yOffsetToFit, -rotation-90, pivot, inDegrees, flip, newLine, strength);
+  var flip = false;
+  var newLine = true;
+  for (var j = 0; yOffset < outputWidth*2; j++){
+    for (var i = 0; xOffset < outputWidth*2; i++) {
+
+      var startpoint = rotatePointAroundPoint({x: xOffset, y:yOffset}, pivot, -rotation-90);
+      if (startpoint.x < 0 || startpoint.x > outputWidth || startpoint.y < 0 || startpoint.y > outputHeight){
+        xOffset += 50;
+        continue;
+      }
+
+      flip = !flip;
+
+
+      //var flip = i % 2 == 0;
+      //var newLine = i == 0;
+      var result = drawPixel(xOffset, yOffset, -rotation-90, pivot, inDegrees, flip, newLine, strength);
       inDegrees = result.outDegrees;
       xOffset += result.travel;
 
@@ -140,11 +155,13 @@ function getPixels(rotation, color, sample) {
       // convert the local color-raster coordinates to image coordinates
       strength = sample(result.pen.x, result.pen.y, outputWidth, outputHeight);
 
+      newLine = false;
       //strength = Math.min(0.8,  strength);
 
     }
+    newLine = true;
     yOffset += 120;
-    xOffset = 0;
+    xOffset = -outputWidth;
   }
 
   return output;
@@ -176,7 +193,8 @@ function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, 
   if (newLine) strength = 0;
   var amplitude = 10+ 80 * strength * strength;
   var outDegrees = 4 + 10 * (1.0 - strength * strength);
-  var muted = strength <= 0.05;
+  var muted = strength <= 0.15;
+  
   var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted);
   return result;
 }
@@ -249,7 +267,7 @@ function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amp
     output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
     output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
   }else{
-      output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
+      output += 'PU' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   }
   // output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
   return {
