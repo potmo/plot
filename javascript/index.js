@@ -3,167 +3,202 @@ var Canvas = require('canvas'),
     fs = require('fs');
 
 
-console.log("loading image")
-var image = loadImage('../moonland.jpg')
+function plot() {
+  console.log("loading image")
+  var image = loadImage('../moonland.jpg')
 
+  var output = '';
+  output += getIntro();
 
-var sample = function(x, y, width, height ){
+  output += drawLine(0, 0, 10000, 0, 1);
 
-  // image width in pixel coordinates
-  var imageWidth = image.width;
-  var imageHeight = image.height;
+  //output += getPixels(45, 4, sampleCyan); // blue
+  //output += getPixels(15, 2, sampleMagenta); // red
+  output += rasterizeImage(75, 1, sampleLuminocity); // black
 
-  var scale = width / imageWidth;
-  var sampleX = x / scale;
-  var sampleY = y / scale;
+  output += drawArc(0,0, 1000, 45, 90, 1);
 
-  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
-  var cmyk = ARGBtoCMYK(argb);
-
-  return cmyk;
+  output += getOutro();
+  printOutputToFile(output, '../output.hpgl');
 }
 
-var sampleCyan = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
-  return cmyk.c;
-}
 
-var sampleBlack = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
-  return cmyk.k;
-}
+function rasterizeImage(rotation, color, sample) {
 
-var sampleMagenta = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
-  return cmyk.m;
-}
+  var output = '';
 
-var sampleLuminocity = function(x,y, width, height){
-  var imageWidth = image.width;
-  var imageHeight = image.height;
+  var positions = [];
+  // TODO: be able to sample from rotated position
+  // TODO: stop when we reached the limit of the image
+  var y = 0;
+  var x = 0;
+  var max = 20;
 
-  var scale = width / imageWidth;
-  var sampleX = x / scale;
-  var sampleY = y / scale;
+  for (var i = 0; i < max; i++){
 
-  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+    var strength = i / max;
 
-  // get weighted average of the rgb taking human color peception into account
-  var luminocity = 0.21 * argb.r + 0.72 * argb.g + 0.07 * argb.b;
+    var angle = 45 - 90 * strength;
+    var length = 5000; //TODO: get a way to get this from the amplitude
 
-  return 1.0 - luminocity / 255.0;
-}
+    var xtravel = length * strength;
+    var ytravel = length ;
 
-var output = '';
-output += getIntro();
-//output += getGrayscale();
-//output += getPixels(45, 4, sampleCyan); // blue
-//output += getPixels(15, 2, sampleMagenta); // red
-//output += getPixels(75, 1, sampleBlack); // black
+    //TODO: sample to get the length
+    positions.push({x: x + xtravel/2, y: y - ytravel / 2});
+    positions.push({x: x + xtravel, y: y + ytravel / 2});
 
+    x += xtravel;
 
-output += getPixels(45, 4, sampleCyan); // blue
-output += getPixels(15, 2, sampleMagenta); // red
-output += getPixels(75, 1, sampleLuminocity); // black
-
-
-//output += getPixels(5, 1, sampleLuminocity); // black
-//output += getPixels(10, 1, sampleLuminocity); // black
-//output += getPixels(15, 1, sampleLuminocity); // black
-//output += getPixels(20, 1, sampleLuminocity); // black
-//output += getPixels(25, 1, sampleLuminocity); // black
-//output += getPixels(30, 1, sampleLuminocity); // black
-//output += getPixels(35, 1, sampleLuminocity); // black
-//output += getPixels(40, 1, sampleLuminocity); // black
-//output += getPixels(45, 1, sampleLuminocity); // black
-//output += getPixels(50, 1, sampleLuminocity); // black
-//output += getPixels(55, 1, sampleLuminocity); // black
-//output += getPixels(60, 1, sampleLuminocity); // black
-//output += getPixels(65, 1, sampleLuminocity); // black
-//output += getPixels(70, 1, sampleLuminocity); // black
-//output += getPixels(75, 1, sampleLuminocity); // black
-//output += getPixels(80, 1, sampleLuminocity); // black
-//output += getPixels(85, 1, sampleLuminocity); // black
-
-
-output += getOutro();
-printOutputToFile(output, '../output.hpgl');
-
-
-function getPixels(rotation, color, sample) {
-
-  var outputWidth = 15000.0;
-  var outputHeight = 10000.0;
-
-  var output = "";
-  var xOffset = -outputWidth;
-  var yOffset = -outputHeight;
-  var inDegrees = 0;
-  var outDegrees = 0;
-  var amplitude = 25;
-  var pivot = {
-    x: 0,
-    y: 0
-  };
-
-  
-
-
-  // side of square in raster coordinates
-  var sideOfRotatedSquare = getSideLengthOfRotatedSquareInSquare(rotation, outputWidth);
-
-  // calculate the offset that the image needs to be moved to not end up outside the box
-  var yOffsetToFit = cos(rotation) * sideOfRotatedSquare;
-  var xOffsetToFit = (16158 - outputWidth) / 2.0;
-
-  var strength = 0;
-
-  pivot.y = yOffsetToFit;
-
-  //output += drawBox(0, 0, outputWidth, 0, 2);
-  //output += drawBox(0, yOffsetToFit, sideOfRotatedSquare, rotation, color);
-
-  output += 'SP'+color+';\n'; // blue
-
-  // The x offset and yOffset is in color-local raster coordinates
-  var flip = false;
-  var newLine = true;
-  for (var j = 0; yOffset < outputWidth*2; j++){
-    for (var i = 0; xOffset < outputWidth*2; i++) {
-
-      var startpoint = rotatePointAroundPoint({x: xOffset, y:yOffset}, pivot, -rotation-90);
-      if (startpoint.x < 0 || startpoint.x > outputWidth || startpoint.y < 0 || startpoint.y > outputHeight){
-        xOffset += 50;
-        continue;
-      }
-
-      flip = !flip;
-
-
-      //var flip = i % 2 == 0;
-      //var newLine = i == 0;
-      var result = drawPixel(xOffset, yOffset, -rotation-90, pivot, inDegrees, flip, newLine, strength);
-      inDegrees = result.outDegrees;
-      xOffset += result.travel;
-
-      output += result.commands;
-
-
-
-    // TODO: Calculate this for all positions before drawing instead by getting the scaled position in the image
-
-      // convert the local color-raster coordinates to image coordinates
-      strength = sample(result.pen.x, result.pen.y, outputWidth, outputHeight);
-
-      newLine = false;
-      //strength = Math.min(0.8,  strength);
-
-    }
-    newLine = true;
-    yOffset += 120;
-    xOffset = -outputWidth;
   }
 
+  positions
+
+  // draw endpoints
+  .iterate(function(pos){
+    output += drawCircle(pos.x, pos.y, 30, 1);
+  })
+
+  // move a sliding window with size 3 other the array and return the triplets
+  .slideOver(3)
+
+  // deep clone
+  .map(function(vertices){
+    return vertices.map(function(node){
+      return {x: node.x, y: node.y};
+    });
+  })
+
+  // shorten the triangles to be half their lengths
+  .map(function(vertices){
+    v0 = vertices[0];
+    v1 = vertices[1];
+    v2 = vertices[2];
+
+    var factor = 0.25;
+
+    v0.x = v1.x + (v0.x - v1.x) * factor;
+    v0.y = v1.y + (v0.y - v1.y) * factor;
+
+    v2.x = v1.x + (v2.x - v1.x) * factor;
+    v2.y = v1.y + (v2.y - v1.y) * factor;
+
+    return [v0, v1, v2];
+  })
+
+   // print legs
+  .iterate(function(vertices){
+    output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
+    output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
+  })
+
+  // draw the incenters
+  .map(function(vertices){
+    var incenter = findIncenter(vertices[0].x, vertices[0].y,
+                                vertices[1].x, vertices[1].y,
+                                vertices[2].x, vertices[2].y);
+
+    var inradius = findIncenterRadius(vertices[0].x, vertices[0].y,
+                                      vertices[1].x, vertices[1].y,
+                                      vertices[2].x, vertices[2].y);
+
+    output += drawCircle(incenter.x, incenter.y, inradius, 3);
+
+    return {vertices: vertices, incenter: incenter, inradius: inradius};
+  })
+
+  // draw the tangents
+  .map(function(slice){
+    var dx = slice.incenter.x - slice.vertices[1].x;
+    var dy = slice.incenter.y - slice.vertices[1].y;
+    var dd = Math.sqrt(dx * dx + dy * dy);
+    var a = Math.asin(slice.inradius / dd);
+    var b = Math.atan2(dy, dx);
+
+    var t1 = b - a
+    var t2 = b + a
+    var ta = { x: slice.incenter.x + slice.inradius * Math.sin(t1),
+               y: slice.incenter.y + slice.inradius * -Math.cos(t1) };
+
+    var tb = { x: slice.incenter.x + slice.inradius * -Math.sin(t2),
+               y: slice.incenter.y + slice.inradius * Math.cos(t2) };
+
+    output += drawCircle(ta.x, ta.y, 10, 4);
+    output += drawCircle(tb.x, tb.y, 10, 4);
+
+    return {
+              vertices: slice.vertices,
+              incenter: slice.incenter,
+              inradius: slice.inradius,
+              tangent1: ta,
+              tangent2: tb
+            };
+
+  })
+
+  // draw the arc (http://math.stackexchange.com/questions/285866/calculating-circle-radius-from-two-points-on-circumference-for-game-movement)
+  // http://www.wolframalpha.com/input/?i=find+a+in+c+%3D+sqrt%282r%5E2%281%E2%88%92cos%282a%29%29%29
+  .iterate(function(slice){
+    var dx = slice.tangent2.x - slice.tangent1.x;
+    var dy = slice.tangent2.y - slice.tangent1.y;
+    var chord = Math.sqrt(dx * dx + dy * dy);
+    var arcAngle = Math.asin(0.5 * Math.sqrt(Math.pow(chord,2) / Math.pow(slice.inradius, 2))) * 2;
+    var arcDegrees = toDegrees(arcAngle) ;
+    //TODO: Find the actual angle to go from
+    output += drawArc(slice.incenter.x, slice.incenter.y, slice.inradius, 0 + 90 + 90 + arcDegrees / 2, arcDegrees + 90 + 90 + arcDegrees / 2, 4);
+
+  })
+
+  //positions.reduce([], function())
+
+  return output;
+}
+
+function rasterizeLine() {
+
+}
+
+
+
+Array.prototype.slideOver = function(windowSize){
+  var output = [];
+  this.reduce(function(array, element){
+    array.push(element);
+
+    if (array.length > windowSize){
+      array.shift();
+    }
+
+    if (array.length === windowSize){
+      output.push([].concat(array));
+    }
+
+    return array;
+
+  }, []);
+  return output;
+}
+
+Array.prototype.iterate = function(callback) {
+  return this.map(function(currentValue, index, array){
+    callback(currentValue, index, array);
+    return currentValue;
+  });
+}
+
+console.log([1,2,3,4,5,6,7,8].slideOver(3).join(', '));
+console.log([1,2,3,4,5,6,7,8].iterate(function(){}).join(', '));
+
+function drawArc(x, y, radius, fromAngle, toAngle, color) {
+  var startX = x + cos(fromAngle) * radius;
+  var startY = y + sin(fromAngle) * radius;
+  var arcAngle = toAngle - fromAngle;
+  var output = '';
+  output += 'SP'+color+';\n'
+  output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
+  output += 'PD;\n';
+  output += 'AA' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + arcAngle.toFixed(2) + ';\n';
+  output += 'SP1;\n'
   return output;
 }
 
@@ -189,93 +224,23 @@ function drawBox(x, y, side, rotation, color) {
   return output;
 }
 
-function drawPixel(xOffset, yOffset, rotation, pivot, inDegrees, flip, newLine, strength) {
-  if (newLine) strength = 0;
-  var amplitude = 10+ 80 * strength * strength;
-  var outDegrees = 4 + 10 * (1.0 - strength * strength);
-  var muted = strength <= 0.15;
-  
-  var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted);
-  return result;
+function drawCircle(x, y, radius, color) {
+  var output = '';
+  output += 'SP'+color+';\n'
+  output += 'PU' + x.toFixed(2) + ',' + y.toFixed(2) + ';\n';
+  output += 'CI' + radius.toFixed(2) + ',' + 10.0.toFixed(2) + ';\n';
+  output += 'SP1;\n'
+
+  return output;
 }
 
-
-function getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, flip, newLine, muted) {
-
-  var radius = 3 + inDegrees * 1.5;
-
-  var arcDegrees = (180 - 90 - inDegrees) + (180 - 90 - outDegrees);
-
-  var leftTangentX = cos(inDegrees - 90) * radius;
-  var leftTangentY = sin(inDegrees - 90) * radius;
-
-  var rightTangentX = cos(180 - outDegrees - 90) * radius;
-  var rightTangentY = sin(180 - outDegrees - 90) * radius;
-
-  var leftPeakCorner = 180 - 90 - inDegrees;
-  var leftLegLength = (amplitude - radius + leftTangentY) / Math.sin(toRads(leftPeakCorner));
-
-  var rightPeakCorner = 180 - 90 - outDegrees;
-  var rightLegLength = (amplitude - radius + rightTangentY) / Math.sin(toRads(rightPeakCorner));
-
-  var p0 = {
-    x: xOffset,
-    y: yOffset
-  };
-
-  var p1 = {
-    x: p0.x + cos(inDegrees) * leftLegLength,
-    y: p0.y + sin(inDegrees) * leftLegLength
-  };
-
-  var p2 = {
-    x: p1.x - leftTangentX + rightTangentX,
-    y: p1.y - leftTangentY + rightTangentY
-  };
-
-  var circle = {
-    x: p1.x - leftTangentX,
-    y: p1.y - leftTangentY
-  };
-
-  var p3 = {
-    x: p2.x + cos(180 - outDegrees) * rightLegLength,
-    y: p2.y + sin(180 - outDegrees) * rightLegLength
-  };
-
-  var travel = p3.x - p0.x;
-
-  if (flip) {
-    p1 = flipPointVertically(p1, p0)
-    p2 = flipPointVertically(p2, p0)
-    p3 = flipPointVertically(p3, p0)
-    circle = flipPointVertically(circle, p0)
-  } else {
-    arcDegrees *= -1;
-  }
-
-  var p0 = rotatePointAroundPoint(p0, pivot, rotation);
-  var p1 = rotatePointAroundPoint(p1, pivot, rotation);
-  var p2 = rotatePointAroundPoint(p2, pivot, rotation);
-  var p3 = rotatePointAroundPoint(p3, pivot, rotation);
-  var circle = rotatePointAroundPoint(circle, pivot, rotation);
-
+function drawLine(x1, y1, x2, y2, color) {
   var output = '';
-  if (newLine) output += 'PU' + p0.x.toFixed(2) + ',' + p0.y.toFixed(2) + ';\n';
-
-  if (!muted){
-    output += 'PD' + p1.x.toFixed(2) + ',' + p1.y.toFixed(2) + ';\n';
-    output += 'AA' + circle.x.toFixed(2) + ',' + circle.y.toFixed(2) + ',' + (arcDegrees).toFixed(2) + ',5;\n';
-  }else{
-      output += 'PU' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
-  }
-  // output += 'PD' + p3.x.toFixed(2) + ',' + p3.y.toFixed(2) + ';\n';
-  return {
-    commands: output,
-    travel: travel,
-    pen: { x: p3.x, y: p3.y },
-    outDegrees: outDegrees
-  };
+  output += 'SP'+color+';\n'
+  output += 'PU' + x1.toFixed(2) + ',' + y1.toFixed(2) + ';\n';
+  output += 'PD' + x2.toFixed(2) + ',' + y2.toFixed(2) + ';\n';
+  output += 'SP1;\n'
+  return output;
 }
 
 function flipPointVertically(point, pivot) {
@@ -371,6 +336,10 @@ function sin(inDegrees) {
 
 function toRads(inDegreess) {
   return inDegreess * Math.PI / 180;
+}
+
+function toDegrees(inRads) {
+  return inRads * 180 / Math.PI;
 }
 
 
@@ -509,6 +478,54 @@ function printOutputToFile(output, file) {
 
 
 
+var sample = function(x, y, width, height ){
+
+  // image width in pixel coordinates
+  var imageWidth = image.width;
+  var imageHeight = image.height;
+
+  var scale = width / imageWidth;
+  var sampleX = x / scale;
+  var sampleY = y / scale;
+
+  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+  var cmyk = ARGBtoCMYK(argb);
+
+  return cmyk;
+}
+
+var sampleCyan = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.c;
+}
+
+var sampleBlack = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.k;
+}
+
+var sampleMagenta = function(x, y, width, height){
+  var cmyk = sample(x, y, width, height);
+  return cmyk.m;
+}
+
+var sampleLuminocity = function(x,y, width, height){
+  var imageWidth = image.width;
+  var imageHeight = image.height;
+
+  var scale = width / imageWidth;
+  var sampleX = x / scale;
+  var sampleY = y / scale;
+
+  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+
+  // get weighted average of the rgb taking human color peception into account
+  var luminocity = 0.21 * argb.r + 0.72 * argb.g + 0.07 * argb.b;
+
+  return 1.0 - luminocity / 255.0;
+}
+
+
 function getGrayscale() {
   var output = "";
   var xOffset = 0;
@@ -541,3 +558,7 @@ function getGrayscale() {
 
   return output;
 }
+
+
+
+plot();
