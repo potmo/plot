@@ -4,7 +4,7 @@ var Canvas = require('canvas'),
 
 
 console.log("loading image")
-var image = loadImage('../guy.jpg')
+var image = loadImage('../moonland.jpg')
 
 
 var sample = function(x, y, width, height ){
