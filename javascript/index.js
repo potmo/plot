@@ -38,11 +38,10 @@ function rasterizeImage(rotation, color, sample) {
 
     var strength = i / max;
 
-    var angle = 45 - 90 * strength;
     var length = 5000; //TODO: get a way to get this from the amplitude
 
     var xtravel = length * strength;
-    var ytravel = 5000;
+    var ytravel = 500;
 
     //TODO: sample to get the length
     positions.push({x: x + xtravel/2, y: y - ytravel / 2});
@@ -75,7 +74,28 @@ function rasterizeImage(rotation, color, sample) {
     v1 = vertices[1];
     v2 = vertices[2];
 
-    var factor = 1.0;
+    var height = getHeightOfTriangle(v0.x ,v0.y, v1.x, v1.y, v2.x, v2.y);
+    var width = getDistance(v0.x, v0.y, v2.x, v2.y);
+
+    var factor = Math.pow(width / height, 2) / 2 - 0.3;
+
+
+    console.log('%d, %d, %d', height, width, factor);
+
+/*
+    // use a linear factor of the angle
+    var maxAngle = 180;
+
+    var angle = getAngleBetweenVectors(leg1, leg2);
+
+    //console.log(angle);
+
+    var factor = Math.pow(Math.abs(angle),2) / Math.pow(maxAngle,2);
+    factor = Math.abs(angle) / maxAngle;
+
+*/
+
+
 
     v0.x = v1.x + (v0.x - v1.x) * factor;
     v0.y = v1.y + (v0.y - v1.y) * factor;
@@ -285,14 +305,7 @@ function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, color) 
   var centerToStart = {x: startX - centerX, y: startY - centerY};
   var centerToEnd = {x: endX - centerX, y: endY - centerY};
 
-  var centerToStartNormal = getNormalized(centerToStart);
-  var centerToEndNormal = getNormalized(centerToEnd);
-
-  var dotProduct = getDot(centerToStartNormal, centerToEndNormal);
-
-  var arcAngle = Math.acos(dotProduct);
-
-  var arcDegrees = toDegrees(-arcAngle);
+  var arcDegrees = getAngleBetweenVectors(centerToStart, centerToEnd) * -1;
 
   var output = '';
   output += 'SP'+color+';\n'
@@ -375,6 +388,18 @@ function rotatePointAroundPoint(point, pivot, degrees) {
   };
 }
 
+function getAngleBetweenVectors( vector1, vector2) {
+  //var radians = Math.atan2(vector2.y - vector1.y, vector2.x - vector1.x);
+  //return toDegrees(radians);
+
+  var normal1 = getNormalized(vector1);
+  var normal2 = getNormalized(vector2);
+  var dotProduct = getDot(normal1, normal2);
+  var arcAngle = Math.acos(dotProduct);
+  var arcDegrees = toDegrees(arcAngle);
+  return arcDegrees;
+}
+
 function getAngleFromVector(vector){
   var degrees = toDegrees(Math.atan2(vector.x, vector.y));
   while(degrees < 0) degrees += 360;
@@ -393,7 +418,17 @@ function getDot(vector1, vector2) {
   return vector1.x * vector2.x + vector1.y * vector2.y;
 }
 
+function getCross(vector1, vector2) {
+  return (vector1.x * vector2.y) - (vector1.y * vector2.x);
+}
 
+function getHeightOfTriangle(Ax, Ay, Bx, By, Cx, Cy) {
+  var a = getDistance(Bx, By, Cx, Cy);
+  var b = getDistance(Ax, Ay, Cx, Cy);
+  var c = getDistance(Ax, Ay, Bx, By);
+  var semiperimiter = (a + b + c) / 2;
+  return (2 * Math.sqrt(semiperimiter * (semiperimiter - a) * (semiperimiter - b) * (semiperimiter - c))) / a;
+}
 
 function findIncenter(Ax, Ay, Bx, By, Cx, Cy) {
   // http://www.mathopenref.com/coordincenter.html
