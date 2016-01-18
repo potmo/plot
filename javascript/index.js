@@ -5,57 +5,75 @@ var Canvas = require('canvas'),
 
 function plot() {
   console.log("loading image")
-  var image = loadImage('../moonland.jpg')
+  var image = loadImage('../explotion01.png')
 
   var output = '';
   output += getIntro();
 
-  output += drawLine(0, 0, 10000, 0, 1);
-
   //output += getPixels(45, 4, sampleCyan); // blue
   //output += getPixels(15, 2, sampleMagenta); // red
-  output += rasterizeImage(75, 1, sampleLuminocity); // black
-
-  output += drawArc(0,0, 1000, 45, 90, 1);
+  output += rasterizeImage(75, 1, image, sampleLuminocity); // black
 
   output += getOutro();
   printOutputToFile(output, '../output.hpgl');
 }
 
 
-function rasterizeImage(rotation, color, sample) {
+function rasterizeImage(rotation, color, image, sample) {
 
+  var debug = true;
   var output = '';
 
-  var positions = [];
-  // TODO: be able to sample from rotated position
-  // TODO: stop when we reached the limit of the image
-  var y = 0;
-  var x = 0;
-  var max = 100;
+  var outputWidth = 16158;
+  var outputHeight = 11040;
 
-  for (var i = 0; i < max; i++){
+  var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
+  console.log(scale);
 
-    var strength = i / max;
+  var stepSize = 5;
 
-    var length = 5000; //TODO: get a way to get this from the amplitude
+  for (var sampleY = 0; sampleY < image.height; sampleY += stepSize) {
+    var positions = [];
+    for (var sampleX = 0; sampleX < image.width; sampleX += stepSize) {
 
-    var xtravel = length * strength;
-    var ytravel = 500;
+      var x = sampleX * scale;
+      var y = sampleY * scale;
 
-    //TODO: sample to get the length
-    positions.push({x: x + xtravel/2, y: y - ytravel / 2});
-    positions.push({x: x + xtravel, y: y + ytravel / 2});
+      var stength = sample(image, sampleX, sampleY);
 
-    x += xtravel;
+      stength = Math.max(0.01, stength);
 
+      positions.push({x: x + stepSize * scale/2, y: y - stepSize * scale / 2 * stength});
+      positions.push({x: x + stepSize * scale, y: y + stepSize * scale / 2 * stength});
+
+    }
+    output += rasterizeLine(positions, debug)
   }
 
+/*
+    positions = [];
+    positions.push({x: 100 + 100/2, y: 100 - 100 / 2});
+    positions.push({x: 100 + 100, y: 100 + 100 / 2});
+
+    positions.push({x: 200 + 100/2, y: 100 - 100 / 2});
+    positions.push({x: 200 + 100, y: 100 + 100 / 2});
+
+    positions.push({x: 300 + 100/2, y: 100 - 100 / 2});
+    positions.push({x: 300 + 100, y: 100 + 100 / 2});
+    output += rasterizeLine(positions, debug)
+    */
+
+  return output;
+
+}
+
+function rasterizeLine(positions, debug) {
+  output = '';
   positions
 
   // draw endpoints
   .iterate(function(pos){
-    output += drawCircle(pos.x, pos.y, 30, 1);
+    if (debug) output += drawCircle(pos.x, pos.y, 30, 1);
   })
 
   // move a sliding window with size 3 other the array and return the triplets
@@ -68,7 +86,7 @@ function rasterizeImage(rotation, color, sample) {
     });
   })
 
-  // shorten the triangles to be half their lengths
+  // shorten the triangles to be relative to their width
   .map(function(vertices){
     v0 = vertices[0];
     v1 = vertices[1];
@@ -78,24 +96,6 @@ function rasterizeImage(rotation, color, sample) {
     var width = getDistance(v0.x, v0.y, v2.x, v2.y);
 
     var factor = Math.pow(width / height, 2) / 2 - 0.3;
-
-
-    console.log('%d, %d, %d', height, width, factor);
-
-/*
-    // use a linear factor of the angle
-    var maxAngle = 180;
-
-    var angle = getAngleBetweenVectors(leg1, leg2);
-
-    //console.log(angle);
-
-    var factor = Math.pow(Math.abs(angle),2) / Math.pow(maxAngle,2);
-    factor = Math.abs(angle) / maxAngle;
-
-*/
-
-
 
     v0.x = v1.x + (v0.x - v1.x) * factor;
     v0.y = v1.y + (v0.y - v1.y) * factor;
@@ -108,9 +108,9 @@ function rasterizeImage(rotation, color, sample) {
 
    // print legs
   .iterate(function(vertices){
-    output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
-    output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
-    output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y, 5);
+    if (debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
+    if (debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
+    if (debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y, 5);
   })
 
   // draw the incenters
@@ -123,7 +123,7 @@ function rasterizeImage(rotation, color, sample) {
                                       vertices[1].x, vertices[1].y,
                                       vertices[2].x, vertices[2].y);
 
-    output += drawCircle(incenter.x, incenter.y, inradius, 3);
+    if (debug) output += drawCircle(incenter.x, incenter.y, inradius, 3);
 
     return {vertices: vertices, incenter: incenter, inradius: inradius};
   })
@@ -144,8 +144,8 @@ function rasterizeImage(rotation, color, sample) {
     var tb = { x: slice.incenter.x + slice.inradius * -Math.sin(t2),
                y: slice.incenter.y + slice.inradius * Math.cos(t2) };
 
-    output += drawCircle(ta.x, ta.y, 10, 4);
-    output += drawCircle(tb.x, tb.y, 10, 4);
+    if (debug) output += drawCircle(ta.x, ta.y, 10, 4);
+    if (debug) output += drawCircle(tb.x, tb.y, 10, 4);
 
     return {
               vertices: slice.vertices,
@@ -210,10 +210,6 @@ function rasterizeImage(rotation, color, sample) {
   //positions.reduce([], function())
 
   return output;
-}
-
-function rasterizeLine() {
-
 }
 
 
@@ -634,46 +630,31 @@ function printOutputToFile(output, file) {
 
 
 
-var sample = function(x, y, width, height ){
+var sample = function(image, x, y){
 
-  // image width in pixel coordinates
-  var imageWidth = image.width;
-  var imageHeight = image.height;
-
-  var scale = width / imageWidth;
-  var sampleX = x / scale;
-  var sampleY = y / scale;
-
-  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+  var argb = getPixelARGB(image, x, image.height - y);
   var cmyk = ARGBtoCMYK(argb);
 
   return cmyk;
 }
 
-var sampleCyan = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
+var sampleCyan = function(image, x, y){
+  var cmyk = sample(image, x, y);
   return cmyk.c;
 }
 
-var sampleBlack = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
+var sampleBlack = function(image, x, y){
+  var cmyk = sample(image, x, y);
   return cmyk.k;
 }
 
-var sampleMagenta = function(x, y, width, height){
-  var cmyk = sample(x, y, width, height);
+var sampleMagenta = function(image, x, y){
+  var cmyk = sample(image, x, y);
   return cmyk.m;
 }
 
-var sampleLuminocity = function(x,y, width, height){
-  var imageWidth = image.width;
-  var imageHeight = image.height;
-
-  var scale = width / imageWidth;
-  var sampleX = x / scale;
-  var sampleY = y / scale;
-
-  var argb = getPixelARGB(image, sampleX, imageHeight - sampleY);
+var sampleLuminocity = function(image, x, y){
+  var argb = getPixelARGB(image, x, image.height - y);
 
   // get weighted average of the rgb taking human color peception into account
   var luminocity = 0.21 * argb.r + 0.72 * argb.g + 0.07 * argb.b;
