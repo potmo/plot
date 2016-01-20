@@ -10,8 +10,8 @@ function plot() {
   var output = '';
   output += getIntro();
 
-  //output += getPixels(45, 4, sampleCyan); // blue
-  //output += getPixels(15, 2, sampleMagenta); // red
+  //output += rasterizeImage(45, 4, image, sampleCyan); // blue
+  //output += rasterizeImage(15, 2, image, sampleMagenta); // red
   output += rasterizeImage(75, 1, image, sampleLuminocity); // black
 
   output += getOutro();
@@ -21,53 +21,88 @@ function plot() {
 
 function rasterizeImage(rotation, color, image, sample) {
 
-  var debug = true;
+  var debug = false;
   var output = '';
 
   var outputWidth = 16158;
   var outputHeight = 11040;
 
   var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
-  console.log(scale);
 
-  var stepSize = 5;
+/*
+  var horizontalStepSize = 2.5;
+  var verticalStepSize = 2.5;
 
-  for (var sampleY = 0; sampleY < image.height; sampleY += stepSize) {
+  var maxAmplitude = 1.0;
+
+  for (var sampleY = 1; sampleY < image.height; sampleY += verticalStepSize) {
     var positions = [];
-    for (var sampleX = 0; sampleX < image.width; sampleX += stepSize) {
+    var previousStepSize = horizontalStepSize / 2;
+    for (var sampleX = 0; sampleX < image.width; ) {
 
       var x = sampleX * scale;
       var y = sampleY * scale;
 
       var stength = sample(image, sampleX, sampleY);
 
-      stength = Math.max(0.01, stength);
+      stength = Math.max(0.001, stength);
 
-      positions.push({x: x + stepSize * scale/2, y: y - stepSize * scale / 2 * stength});
-      positions.push({x: x + stepSize * scale, y: y + stepSize * scale / 2 * stength});
+      var currentStepSize =  horizontalStepSize * (1.0 - 0.7 * stength);
+      var currentScaledStepSize = (previousStepSize + currentStepSize)/2;
+
+      positions.push({x: x + currentScaledStepSize * scale/2, y: y - verticalStepSize * maxAmplitude * scale / 2 * stength});
+      positions.push({x: x + currentScaledStepSize * scale, y: y + verticalStepSize * maxAmplitude * scale / 2 * stength});
+
+      sampleX += currentScaledStepSize;
+      previousStepSize = currentStepSize;
 
     }
-    output += rasterizeLine(positions, debug)
+    output += rasterizeLine(positions, color, debug)
+  }*/
+
+
+  var horizontalSlices = 50;
+  var verticalSlices = 120;
+
+  var amplitudeGain = 2.0;
+
+  for (var sliceY = 0; sliceY < verticalSlices; sliceY++){
+    var positions = [];
+    for (var sliceX = 0; sliceX < horizontalSlices; sliceX++){
+      var relativeX = sliceX / horizontalSlices;
+      var relativeY = sliceY / verticalSlices;
+
+      var sampleX = image.width * relativeX;
+      var sampleY = image.height * relativeY;
+
+      var stength = sample(image, sampleX, sampleY);
+
+      var x = sampleX * scale;
+      var y = sampleY * scale;
+
+      var ocilationsPerSlice = 1 + Math.round(stength * 4);
+
+      var frequencyLength = (image.width / horizontalSlices) * scale;
+      var amplitudeHeight = (image.height / verticalSlices) * scale;
+
+      var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
+
+      for (var o = 0; o < ocilationsPerSlice; o++) {
+            var subsliceStart = subsliceFrequencyLength * o;
+            positions.push({x: x + subsliceStart + subsliceFrequencyLength / 2, y: y - amplitudeHeight / 2 * stength * amplitudeGain});
+            positions.push({x: x + subsliceStart + subsliceFrequencyLength, y: y + amplitudeHeight / 2 * stength * amplitudeGain});
+      }
+
+    }
+    output += rasterizeLine(positions, color, debug)
   }
 
-/*
-    positions = [];
-    positions.push({x: 100 + 100/2, y: 100 - 100 / 2});
-    positions.push({x: 100 + 100, y: 100 + 100 / 2});
-
-    positions.push({x: 200 + 100/2, y: 100 - 100 / 2});
-    positions.push({x: 200 + 100, y: 100 + 100 / 2});
-
-    positions.push({x: 300 + 100/2, y: 100 - 100 / 2});
-    positions.push({x: 300 + 100, y: 100 + 100 / 2});
-    output += rasterizeLine(positions, debug)
-    */
 
   return output;
 
 }
 
-function rasterizeLine(positions, debug) {
+function rasterizeLine(positions, color, debug) {
   output = '';
   positions
 
@@ -92,7 +127,26 @@ function rasterizeLine(positions, debug) {
     v1 = vertices[1];
     v2 = vertices[2];
 
+    //var height = getHeightOfTriangle(v0.x ,v0.y, v1.x, v1.y, v2.x, v2.y);
+
+    var leg2Length = getDistance(v1.x, v1.y, v2.x, v2.y);
+    var b = getDistance(v0.x, v0.y, v2.x, v2.y);
+    var leg1Length = getDistance(v0.x, v0.y, v1.x, v1.y);
+
+    var longestLeg = Math.max(leg1Length, leg2Length);
+
+    v0.x = v1.x + (v0.x - v1.x) / leg1Length * longestLeg;
+    v0.y = v1.y + (v0.y - v1.y) / leg1Length * longestLeg;
+
+    v2.x = v1.x + (v2.x - v1.x) / leg2Length * longestLeg;
+    v2.y = v1.y + (v2.y - v1.y) / leg2Length * longestLeg;
+
+    //var angle = getAngleBetweenVectors({x: v0.x - v1.x, y: v0.y - v1.y}, {x: v2.x - v1.x, y: v2.y - v1.y});
+    //var base = sin(angle) * longestLeg;
+
+    //var height = getHeightOfTriangleFromSides(longestLeg,base,longestLeg);
     var height = getHeightOfTriangle(v0.x ,v0.y, v1.x, v1.y, v2.x, v2.y);
+
     var width = getDistance(v0.x, v0.y, v2.x, v2.y);
 
     var factor = Math.pow(width / height, 2) / 2 - 0.3;
@@ -108,9 +162,9 @@ function rasterizeLine(positions, debug) {
 
    // print legs
   .iterate(function(vertices){
-    if (debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
-    if (debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
-    if (debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y, 5);
+     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
+     if(debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
+     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y, 5);
   })
 
   // draw the incenters
@@ -181,7 +235,7 @@ function rasterizeLine(positions, debug) {
     output += drawLine(slice.incenter.x, slice.incenter.y, slice.incenter.x + cos(bisectorAngle) * 200, slice.incenter.y + sin(bisectorAngle) * 200, 2);
     */
 
-    output += drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 4);
+    output += drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, color);
 
   })
 
@@ -194,7 +248,7 @@ function rasterizeLine(positions, debug) {
   .collect(2)
 
   .iterate(function(slices){
-    output += drawLine(slices[0].tangent2.x, slices[0].tangent2.y, slices[1].tangent2.x, slices[1].tangent2.y, 4);
+    output += drawLine(slices[0].tangent2.x, slices[0].tangent2.y, slices[1].tangent2.x, slices[1].tangent2.y, color);
   })
 
   .explode()
@@ -204,7 +258,7 @@ function rasterizeLine(positions, debug) {
   .collect(2)
 
   .iterate(function(slices){
-    output += drawLine(slices[0].tangent1.x, slices[0].tangent1.y, slices[1].tangent1.x, slices[1].tangent1.y, 4);
+    output += drawLine(slices[0].tangent1.x, slices[0].tangent1.y, slices[1].tangent1.x, slices[1].tangent1.y, color);
   })
 
   //positions.reduce([], function())
@@ -279,9 +333,6 @@ Array.prototype.dropFirst = function() {
   this.shift();
   return this;
 }
-
-console.log([1,2,3,4,5,6,7,8].slideOver(3).join(', '));
-console.log([1,2,3,4,5,6,7,8].iterate(function(){}).join(', '));
 
 function drawArc(x, y, radius, fromAngle, toAngle, color) {
   var startX = x + cos(fromAngle) * radius;
@@ -422,6 +473,10 @@ function getHeightOfTriangle(Ax, Ay, Bx, By, Cx, Cy) {
   var a = getDistance(Bx, By, Cx, Cy);
   var b = getDistance(Ax, Ay, Cx, Cy);
   var c = getDistance(Ax, Ay, Bx, By);
+  return getHeightOfTriangleFromSides(a,b,c)
+}
+
+function getHeightOfTriangleFromSides(a, b ,c) {
   var semiperimiter = (a + b + c) / 2;
   return (2 * Math.sqrt(semiperimiter * (semiperimiter - a) * (semiperimiter - b) * (semiperimiter - c))) / a;
 }
