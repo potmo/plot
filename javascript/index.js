@@ -7,14 +7,14 @@ function plot() {
   console.log("loading image")
   var image = loadImage('../skeleton2.jpg')
 
-  var output = '';
-  output += getIntro();
+  var output = [];
+  output.pushAll(getIntro());
 
-  output += rasterizeImage(45, 4, image, sampleCyan); // blue
-  output += rasterizeImage(75, 1, image, sampleLuminocity); // black
-  output += rasterizeImage(15, 2, image, sampleMagenta); // red
+  output.pushAll( rasterizeImage(45, 4, image, sampleCyan)); // blue
+  output.pushAll( rasterizeImage(75, 1, image, sampleLuminocity)); // black
+  output.pushAll( rasterizeImage(15, 2, image, sampleMagenta)); // red
 
-  output += getOutro();
+  output.pushAll( getOutro() );
   printOutputToFile(output, '../output.hpgl');
 }
 
@@ -22,9 +22,9 @@ function plot() {
 function rasterizeImage(rotation, color, image, sample) {
 
   var debug = false;
-  var output = '';
+  var output = [];
 
-  output += 'SP' + color + ';\n';
+  output.addCommand('SP', color);
 
   var outputWidth = 12000;//16158;
   var outputHeight = 10000;//11040;
@@ -63,7 +63,8 @@ function rasterizeImage(rotation, color, image, sample) {
       }
 
     }
-    output += rasterizeLine(positions, color, debug)
+    var line = rasterizeLine(positions, color, debug);
+    output.pushAll(line);
   }
 
 
@@ -76,7 +77,7 @@ function rasterizeLine(positions, color, debug) {
 
   // draw endpoints
   .iterate(function(pos){
-    if (debug) output += drawCircle(pos.x, pos.y, 30);
+    if (debug) output.pushAll( drawCircle(pos.x, pos.y, 30) );
   })
 
   // move a sliding window with size 3 other the array and return the triplets
@@ -130,9 +131,9 @@ function rasterizeLine(positions, color, debug) {
 
    // print legs
   .iterate(function(vertices){
-     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y);
-     if(debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
-     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y);
+     if(debug) output.pushAll( drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y) );
+     if(debug) output.pushAll( drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y) );
+     if(debug) output.pushAll( drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y) );
   })
 
   // draw the incenters
@@ -145,7 +146,7 @@ function rasterizeLine(positions, color, debug) {
                                       vertices[1].x, vertices[1].y,
                                       vertices[2].x, vertices[2].y);
 
-    if (debug) output += drawCircle(incenter.x, incenter.y, inradius);
+    if (debug) output.pushAll( drawCircle(incenter.x, incenter.y, inradius) );
 
     return {vertices: vertices, incenter: incenter, inradius: inradius};
   })
@@ -166,8 +167,8 @@ function rasterizeLine(positions, color, debug) {
     var tb = { x: slice.incenter.x + slice.inradius * -Math.sin(t2),
                y: slice.incenter.y + slice.inradius * Math.cos(t2) };
 
-    if (debug) output += drawCircle(ta.x, ta.y, 10);
-    if (debug) output += drawCircle(tb.x, tb.y, 10);
+    if (debug) output.pushAll( drawCircle(ta.x, ta.y, 10) );
+    if (debug) output.pushAll( drawCircle(tb.x, tb.y, 10) );
 
     return {
               vertices: slice.vertices,
@@ -223,32 +224,37 @@ function rasterizeLine(positions, color, debug) {
     while(array[1].length >= 2 || array[2].length >= 1 || array[3].length >= 2 || array[4].length >= 1){
 
       if (array[1].length >= 2) {
-        commands.push(array[1].shift());
+        commands.pushAll(array[1].shift());
         array[1].shift() // discard the even
       }
 
       if (array[2].length >= 1){
-        commands.push(array[2].shift());
+        commands.pushAll(array[2].shift());
       }
 
       if (array[3].length >= 2){
         array[3].shift() // discard the uneven
-        commands.push(array[3].shift());
+        commands.pushAll(array[3].shift());
       }
 
       if (array[4].length >= 1){
-        commands.push(array[4].shift());
+        commands.pushAll(array[4].shift());
       }
 
     }
 
     return commands;
-  })
-
-  .join('');
+  });
 
 }
 
+Array.prototype.pushAll = function(otherArray) {
+  var self = this;
+  otherArray.forEach(function(item){
+    self.push(item);
+  });
+  return this;
+}
 
 // slide over the elements and create tuples of a size
 // [1,2,3,4] = [[1,2], [2,3], [3,4]]
@@ -322,6 +328,14 @@ Array.prototype.jump = function(offset, jumpSize, mutatorFunction) {
   return this;
 }
 
+Array.prototype.addCommand = function(name) {
+  var args = [];
+  for(var i = 1; i < arguments.length; i++ ){
+    args.push(arguments[i]);
+  }
+  this.push({name: name, args: args});
+  return this;
+}
 
 // like flat map. Take all elements of an array that contains 
 // elements and return an array with all the elements elements concatenated
@@ -350,11 +364,11 @@ function drawArc(x, y, radius, fromAngle, toAngle) {
   var startX = x + cos(fromAngle) * radius;
   var startY = y + sin(fromAngle) * radius;
   var arcAngle = toAngle - fromAngle;
-  var output = '';
-  output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
-  output += 'PD;\n';
-  output += 'AA' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + arcAngle.toFixed(2) + ';\n';
-  return output;
+
+  return []
+    .addCommand('PU', startX, startY)
+    .addCommand('PD')
+    .addCommand('AA', x, y, arcAngle);
 }
 
 function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, direction) {
@@ -364,19 +378,19 @@ function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, directi
 
   var arcDegrees = getAngleBetweenVectors(centerToStart, centerToEnd) * -1;
 
-  var output = '';
+  var output = [];
   if (direction > 0){
-    output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
+    output.addCommand('PU', startX, startY);
   } else{
-    output += 'PU' + endX.toFixed(2) + ',' + endY.toFixed(2) + ';\n';
+    output.addCommand('PU', endX, endY);
   }
-  output += 'PD;\n';
-  output += 'AA' + centerX.toFixed(2) + ',' + centerY.toFixed(2) + ',' + (arcDegrees * direction).toFixed(2) + ';\n';
+  output
+    .addCommand('PD')
+    .addCommand('AA', centerX, centerY, (arcDegrees * direction));
   return output;
 }
 
 function drawRotatedBox(x, y, side, rotation) {
-  var output = '';
   var ax = x;
   var ay = y;
   var bx = ax + cos(rotation) * side;
@@ -386,40 +400,46 @@ function drawRotatedBox(x, y, side, rotation) {
   var dx = cx + cos(rotation + 180) * side;
   var dy = cy + sin(rotation + 180) * side;
 
-  output += 'PU' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
-  output += 'PD' + bx.toFixed(2) + ',' + by.toFixed(2) + ';\n';
-  output += 'PD' + cx.toFixed(2) + ',' + cy.toFixed(2) + ';\n';
-  output += 'PD' + dx.toFixed(2) + ',' + dy.toFixed(2) + ';\n';
-  output += 'PD' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
-
-  return output;
+  return []
+    .addCommand('PU', ax, ay)
+    .addCommand('PD', bx, by)
+    .addCommand('PD', cx, cy)
+    .addCommand('PD', dx, dy)
+    .addCommand('PD', ax, ay);
 }
 
 function drawRectangle(x, y, width, height) {
-  var output = '';
-  output += 'PA' + x.toFixed(2) + ',' + y.toFixed(2) + ';\n';
-  output += 'PD' + (x+width).toFixed(2) + ',' + (y).toFixed(2);
-  output += ',' + (x+width).toFixed(2) + ',' + (y+height).toFixed(2);
-  output += ',' + (x).toFixed(2) + ',' + (y+height).toFixed(2);
-  output += ',' + (x).toFixed(2) + ',' + (y).toFixed(2);
-  output += ';\n'
-
-  return output;
-}
+  return []
+    .addCommand('PU', x, y)
+    .addCommand('PD',
+      x + width, y,
+      x + width, y + height,
+      x, y + height,
+      x, y);
+  }
 
 function drawCircle(x, y, radius) {
-  var output = '';
-  output += 'PU' + x.toFixed(2) + ',' + y.toFixed(2) + ';\n';
-  output += 'CI' + radius.toFixed(2) + ',' + 10.0.toFixed(2) + ';\n';
-
-  return output;
+  return []
+    .addCommand('PU', x, y)
+    .addCommand('CI', radius, 10.0);
 }
 
 function drawLine(x1, y1, x2, y2) {
-  var output = '';
-  output += 'PU' + x1.toFixed(2) + ',' + y1.toFixed(2) + ';\n';
-  output += 'PD' + x2.toFixed(2) + ',' + y2.toFixed(2) + ';\n';
-  return output;
+  return []
+    .addCommand('PU', x1,  y1)
+    .addCommand('PD', x2,  y2);
+}
+
+function getIntro() {
+  return []
+    .addCommand('IN') // initialize
+    .addCommand('IP', '0', '0', '16158', '11040') // set the work area
+    .addCommand('VS', '8') // set pen speed (1 to 128)
+    .addCommand('SP', '1'); // select pen 1
+}
+
+function getOutro() {
+  return [].addCommand('SP', '0');
 }
 
 function flipPointVertically(point, pivot) {
@@ -532,20 +552,6 @@ function findIncenterRadius(Ax, Ay, Bx, By, Cx, Cy) {
 
 function getDistance(Ax, Ay, Bx, By) {
   return Math.sqrt(Math.pow(Bx - Ax, 2) + Math.pow(By - Ay, 2));
-}
-
-function getIntro() {
-  var output = '';
-  output += 'IN;\n'; // initialize
-  output += 'IP0,0,16158,11040;\n'; // set the work area
-  output += 'VS8;\n'; // set pen speed (1 to 128)
-  output += 'SP1;\n'; // select pen 1
-
-  return output;
-}
-
-function getOutro() {
-  return 'SP0;\n'; // select pen 0 (put back pen in tray)
 }
 
 function cos(inDegrees) {
@@ -693,7 +699,10 @@ function getIndexFromCoordinate(imageData, x, y) {
 }
 
 function printOutputToFile(output, file) {
-  fs.writeFile(__dirname + '/' + file, output, function(err) {
+
+  var hpgl = commandsToHPGL(output);
+
+  fs.writeFile(__dirname + '/' + file, hpgl, function(err) {
     if(err) {
       return console.log(err);
     }
@@ -701,7 +710,21 @@ function printOutputToFile(output, file) {
   });
 }
 
+function commandsToHPGL(commands) {
+  return commands.map(function(command) {
 
+    console.log(command);
+    console.log('');
+
+    return command.name + command.args.map(function(arg) {
+      if (typeof arg === 'number'){
+        return arg.toFixed(2);
+      }else{
+        return arg;
+      }
+    }).join(',') + ';';
+  }).join('\n');
+}
 
 var sample = function(image, x, y){
 
@@ -734,41 +757,5 @@ var sampleLuminocity = function(image, x, y){
 
   return 1.0 - luminocity / 255.0;
 }
-
-
-function getGrayscale() {
-  var output = "";
-  var xOffset = 0;
-  var yOffset = 0;
-  var rotation = 0;
-  var inDegrees = 41;
-  var outDegrees = 41;
-  var amplitude = 25;
-  var pivot = {
-    x: 0,
-    y: 0
-  };
-
-  for (var j = 0; j < 40; j++) {
-    for (var i = 0; xOffset < 5000; i++) {
-      var newLine  = i == 0;
-
-      var result = getWedge3(xOffset, yOffset, rotation, pivot, inDegrees, outDegrees, amplitude, ((i) % 2 == 0), newLine);
-      output += result.commands;
-      outDegrees = inDegrees;
-      inDegrees = Math.min(inDegrees, 45);
-      xOffset += result.travel;
-    }
-    yOffset += 180;
-    xOffset = 0;
-    inDegrees -= 1;
-    outDegrees = inDegrees;
-    amplitude += 1.5;
-  }
-
-  return output;
-}
-
-
 
 plot();
