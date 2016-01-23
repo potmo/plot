@@ -5,14 +5,14 @@ var Canvas = require('canvas'),
 
 function plot() {
   console.log("loading image")
-  var image = loadImage('../explotion01.png')
+  var image = loadImage('../skeleton2.jpg')
 
   var output = '';
   output += getIntro();
 
-  //output += rasterizeImage(45, 4, image, sampleCyan); // blue
-  //output += rasterizeImage(15, 2, image, sampleMagenta); // red
+  output += rasterizeImage(45, 4, image, sampleCyan); // blue
   output += rasterizeImage(75, 1, image, sampleLuminocity); // black
+  output += rasterizeImage(15, 2, image, sampleMagenta); // red
 
   output += getOutro();
   printOutputToFile(output, '../output.hpgl');
@@ -24,49 +24,18 @@ function rasterizeImage(rotation, color, image, sample) {
   var debug = false;
   var output = '';
 
-  var outputWidth = 16158;
-  var outputHeight = 11040;
+  output += 'SP' + color + ';\n';
+
+  var outputWidth = 12000;//16158;
+  var outputHeight = 10000;//11040;
 
   var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
-
-/*
-  var horizontalStepSize = 2.5;
-  var verticalStepSize = 2.5;
-
-  var maxAmplitude = 1.0;
-
-  for (var sampleY = 1; sampleY < image.height; sampleY += verticalStepSize) {
-    var positions = [];
-    var previousStepSize = horizontalStepSize / 2;
-    for (var sampleX = 0; sampleX < image.width; ) {
-
-      var x = sampleX * scale;
-      var y = sampleY * scale;
-
-      var stength = sample(image, sampleX, sampleY);
-
-      stength = Math.max(0.001, stength);
-
-      var currentStepSize =  horizontalStepSize * (1.0 - 0.7 * stength);
-      var currentScaledStepSize = (previousStepSize + currentStepSize)/2;
-
-      positions.push({x: x + currentScaledStepSize * scale/2, y: y - verticalStepSize * maxAmplitude * scale / 2 * stength});
-      positions.push({x: x + currentScaledStepSize * scale, y: y + verticalStepSize * maxAmplitude * scale / 2 * stength});
-
-      sampleX += currentScaledStepSize;
-      previousStepSize = currentStepSize;
-
-    }
-    output += rasterizeLine(positions, color, debug)
-  }*/
-
-
-  var horizontalSlices = 50;
-  var verticalSlices = 120;
+  var horizontalSlices = 4;
+  var verticalSlices = 2;
 
   var amplitudeGain = 2.0;
 
-  for (var sliceY = 0; sliceY < verticalSlices; sliceY++){
+  for (var sliceY = 1; sliceY < verticalSlices; sliceY++){
     var positions = [];
     for (var sliceX = 0; sliceX < horizontalSlices; sliceX++){
       var relativeX = sliceX / horizontalSlices;
@@ -80,7 +49,7 @@ function rasterizeImage(rotation, color, image, sample) {
       var x = sampleX * scale;
       var y = sampleY * scale;
 
-      var ocilationsPerSlice = 1 + Math.round(stength * 4);
+      var ocilationsPerSlice = 1;// + Math.round(stength * 4);
 
       var frequencyLength = (image.width / horizontalSlices) * scale;
       var amplitudeHeight = (image.height / verticalSlices) * scale;
@@ -88,9 +57,9 @@ function rasterizeImage(rotation, color, image, sample) {
       var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
 
       for (var o = 0; o < ocilationsPerSlice; o++) {
-            var subsliceStart = subsliceFrequencyLength * o;
-            positions.push({x: x + subsliceStart + subsliceFrequencyLength / 2, y: y - amplitudeHeight / 2 * stength * amplitudeGain});
-            positions.push({x: x + subsliceStart + subsliceFrequencyLength, y: y + amplitudeHeight / 2 * stength * amplitudeGain});
+        var subsliceStart = subsliceFrequencyLength * o;
+        positions.push({x: x + subsliceStart + subsliceFrequencyLength / 2, y: y - amplitudeHeight / 2 * stength * amplitudeGain});
+        positions.push({x: x + subsliceStart + subsliceFrequencyLength, y: y + amplitudeHeight / 2 * stength * amplitudeGain});
       }
 
     }
@@ -103,12 +72,11 @@ function rasterizeImage(rotation, color, image, sample) {
 }
 
 function rasterizeLine(positions, color, debug) {
-  output = '';
-  positions
+  return positions
 
   // draw endpoints
   .iterate(function(pos){
-    if (debug) output += drawCircle(pos.x, pos.y, 30, 1);
+    if (debug) output += drawCircle(pos.x, pos.y, 30);
   })
 
   // move a sliding window with size 3 other the array and return the triplets
@@ -162,9 +130,9 @@ function rasterizeLine(positions, color, debug) {
 
    // print legs
   .iterate(function(vertices){
-     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, 2);
-     if(debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y, 2);
-     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y, 5);
+     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y);
+     if(debug) output += drawLine(vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
+     if(debug) output += drawLine(vertices[0].x, vertices[0].y, vertices[2].x, vertices[2].y);
   })
 
   // draw the incenters
@@ -177,7 +145,7 @@ function rasterizeLine(positions, color, debug) {
                                       vertices[1].x, vertices[1].y,
                                       vertices[2].x, vertices[2].y);
 
-    if (debug) output += drawCircle(incenter.x, incenter.y, inradius, 3);
+    if (debug) output += drawCircle(incenter.x, incenter.y, inradius);
 
     return {vertices: vertices, incenter: incenter, inradius: inradius};
   })
@@ -198,8 +166,8 @@ function rasterizeLine(positions, color, debug) {
     var tb = { x: slice.incenter.x + slice.inradius * -Math.sin(t2),
                y: slice.incenter.y + slice.inradius * Math.cos(t2) };
 
-    if (debug) output += drawCircle(ta.x, ta.y, 10, 4);
-    if (debug) output += drawCircle(tb.x, tb.y, 10, 4);
+    if (debug) output += drawCircle(ta.x, ta.y, 10);
+    if (debug) output += drawCircle(tb.x, tb.y, 10);
 
     return {
               vertices: slice.vertices,
@@ -211,59 +179,74 @@ function rasterizeLine(positions, color, debug) {
 
   })
 
-  // draw the arc (http://math.stackexchange.com/questions/285866/calculating-circle-radius-from-two-points-on-circumference-for-game-movement)
-  // http://www.wolframalpha.com/input/?i=find+a+in+c+%3D+sqrt%282r%5E2%281%E2%88%92cos%282a%29%29%29
-  .iterate(function(slice){
-    /*
-    var dx = slice.tangent2.x - slice.tangent1.x;
-    var dy = slice.tangent2.y - slice.tangent1.y;
-    var chord = Math.sqrt(dx * dx + dy * dy);
-    var arcAngle = Math.asin(0.5 * Math.sqrt(Math.pow(chord,2) / Math.pow(slice.inradius, 2))) * 2;
-    var arcDegrees = toDegrees(arcAngle) ;
+  .wrap()
 
-    var leg1 = {x: slice.vertices[1].x - slice.vertices[0].x, y: slice.vertices[1].y - slice.vertices[0].y };
-    var leg2 = {x: slice.vertices[1].x - slice.vertices[2].x, y: slice.vertices[1].y - slice.vertices[2].y };
-
-    var leg1normal = getNormalized(leg1);
-    var leg2normal = getNormalized(leg2);
-
-    var bisector = {x: leg1normal.x + leg2normal.x, y: leg1normal.y + leg2normal.y};
-    var bisectorAngle = getAngleFromVector(bisector) - 180;
-
-    arcDegrees = 20;
-
-    output += drawLine(slice.incenter.x, slice.incenter.y, slice.incenter.x + cos(bisectorAngle) * 200, slice.incenter.y + sin(bisectorAngle) * 200, 2);
-    */
-
-    output += drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, color);
-
+  .teeMap(function(slices){
+    return slices
+      .map(function(slice){
+        return drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 1);
+      })
   })
 
-  // draw the legs
-  .iterate(function(slice) {
-    //output += drawLine(slice.vertices[0].x, slice.vertices[0].y, slice.tangent1.x, slice.tangent1.y, 4);
-    //output += drawLine(slice.tangent2.x, slice.tangent2.y, slice.vertices[2].x, slice.vertices[2].y, 4);
+  .teeMap(function(slices){
+    return slices
+      .collect(2)
+      .map(function(slicePairs){
+        return drawLine(slicePairs[0].tangent2.x, slicePairs[0].tangent2.y, slicePairs[1].tangent2.x, slicePairs[1].tangent2.y);
+      });
   })
 
-  .collect(2)
-
-  .iterate(function(slices){
-    output += drawLine(slices[0].tangent2.x, slices[0].tangent2.y, slices[1].tangent2.x, slices[1].tangent2.y, color);
+  .teeMap(function(slices){
+    return slices
+      .map(function(slice){
+        return drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, -1);
+      })
   })
 
-  .explode()
-
-  .dropFirst()
-
-  .collect(2)
-
-  .iterate(function(slices){
-    output += drawLine(slices[0].tangent1.x, slices[0].tangent1.y, slices[1].tangent1.x, slices[1].tangent1.y, color);
+  .teeMap(function(slices){
+    return slices
+      .dropFirst()
+      .collect(2)
+      .map(function(slicePairs){
+        return drawLine(slicePairs[0].tangent1.x, slicePairs[0].tangent1.y, slicePairs[1].tangent1.x, slicePairs[1].tangent1.y);
+      })
   })
 
-  //positions.reduce([], function())
+  .introspect(function(array){
+    var commands = []
 
-  return output;
+  // 0 is the original slices (ignore it)
+  // 1 is the top arc
+  // 2 is right leg
+  // 3 is the bottom arc
+  // 4 is the left leg
+    while(array[1].length >= 2 || array[2].length >= 1 || array[3].length >= 2 || array[4].length >= 1){
+
+      if (array[1].length >= 2) {
+        commands.push(array[1].shift());
+        array[1].shift() // discard the even
+      }
+
+      if (array[2].length >= 1){
+        commands.push(array[2].shift());
+      }
+
+      if (array[3].length >= 2){
+        array[3].shift() // discard the uneven
+        commands.push(array[3].shift());
+      }
+
+      if (array[4].length >= 1){
+        commands.push(array[4].shift());
+      }
+
+    }
+
+    return commands;
+  })
+
+  .join('');
+
 }
 
 
@@ -286,6 +269,23 @@ Array.prototype.slideOver = function(windowSize){
 
   }, []);
   return output;
+}
+
+// just get a reference to this
+Array.prototype.introspect = function(callback) {
+  return callback(this);
+}
+
+// map the first element of the array (that is expected to be an array) but make a copy of the result and put that last
+Array.prototype.teeMap = function(callback) {
+  var mapped = callback(this[0].slice());
+  this.push(mapped);
+  return this;
+}
+
+// just wrap the array in an array
+Array.prototype.wrap = function() {
+  return [this.slice()];
 }
 
 // just iterate over all elements
@@ -313,6 +313,16 @@ Array.prototype.collect = function(windowSize){
   return output;
 }
 
+Array.prototype.jump = function(offset, jumpSize, mutatorFunction) {
+
+  for (var i = offset; i < this.length; i++){
+    this[i] = mutatorFunction(this[i]);
+  }
+
+  return this;
+}
+
+
 // like flat map. Take all elements of an array that contains 
 // elements and return an array with all the elements elements concatenated
 // [[1,2], [3,4]] = [1,2,3,4]
@@ -324,30 +334,30 @@ Array.prototype.explode = function() {
 
 // pop an element from the list
 Array.prototype.dropLast = function() {
-  this.pop();
-  return this;
+  var clone = this.slice();
+  clone.pop();
+  return clone;
 }
 
 // unshift an element from the list
 Array.prototype.dropFirst = function() {
-  this.shift();
-  return this;
+  var clone = this.slice();
+  clone.shift();
+  return clone;
 }
 
-function drawArc(x, y, radius, fromAngle, toAngle, color) {
+function drawArc(x, y, radius, fromAngle, toAngle) {
   var startX = x + cos(fromAngle) * radius;
   var startY = y + sin(fromAngle) * radius;
   var arcAngle = toAngle - fromAngle;
   var output = '';
-  output += 'SP'+color+';\n'
   output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
   output += 'PD;\n';
   output += 'AA' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + arcAngle.toFixed(2) + ';\n';
-  output += 'SP1;\n'
   return output;
 }
 
-function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, color) {
+function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, direction) {
 
   var centerToStart = {x: startX - centerX, y: startY - centerY};
   var centerToEnd = {x: endX - centerX, y: endY - centerY};
@@ -355,15 +365,17 @@ function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, color) 
   var arcDegrees = getAngleBetweenVectors(centerToStart, centerToEnd) * -1;
 
   var output = '';
-  output += 'SP'+color+';\n'
-  output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
+  if (direction > 0){
+    output += 'PU' + startX.toFixed(2) + ',' + startY.toFixed(2) + ';\n';
+  } else{
+    output += 'PU' + endX.toFixed(2) + ',' + endY.toFixed(2) + ';\n';
+  }
   output += 'PD;\n';
-  output += 'AA' + centerX.toFixed(2) + ',' + centerY.toFixed(2) + ',' + arcDegrees.toFixed(2) + ';\n';
-  output += 'SP1;\n'
+  output += 'AA' + centerX.toFixed(2) + ',' + centerY.toFixed(2) + ',' + (arcDegrees * direction).toFixed(2) + ';\n';
   return output;
 }
 
-function drawBox(x, y, side, rotation, color) {
+function drawRotatedBox(x, y, side, rotation) {
   var output = '';
   var ax = x;
   var ay = y;
@@ -374,33 +386,39 @@ function drawBox(x, y, side, rotation, color) {
   var dx = cx + cos(rotation + 180) * side;
   var dy = cy + sin(rotation + 180) * side;
 
-  output += 'SP'+color+';\n'
   output += 'PU' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
   output += 'PD' + bx.toFixed(2) + ',' + by.toFixed(2) + ';\n';
   output += 'PD' + cx.toFixed(2) + ',' + cy.toFixed(2) + ';\n';
   output += 'PD' + dx.toFixed(2) + ',' + dy.toFixed(2) + ';\n';
   output += 'PD' + ax.toFixed(2) + ',' + ay.toFixed(2) + ';\n';
-  output += 'SP1;\n'
 
   return output;
 }
 
-function drawCircle(x, y, radius, color) {
+function drawRectangle(x, y, width, height) {
   var output = '';
-  output += 'SP'+color+';\n'
+  output += 'PA' + x.toFixed(2) + ',' + y.toFixed(2) + ';\n';
+  output += 'PD' + (x+width).toFixed(2) + ',' + (y).toFixed(2);
+  output += ',' + (x+width).toFixed(2) + ',' + (y+height).toFixed(2);
+  output += ',' + (x).toFixed(2) + ',' + (y+height).toFixed(2);
+  output += ',' + (x).toFixed(2) + ',' + (y).toFixed(2);
+  output += ';\n'
+
+  return output;
+}
+
+function drawCircle(x, y, radius) {
+  var output = '';
   output += 'PU' + x.toFixed(2) + ',' + y.toFixed(2) + ';\n';
   output += 'CI' + radius.toFixed(2) + ',' + 10.0.toFixed(2) + ';\n';
-  output += 'SP1;\n'
 
   return output;
 }
 
-function drawLine(x1, y1, x2, y2, color) {
+function drawLine(x1, y1, x2, y2) {
   var output = '';
-  output += 'SP'+color+';\n'
   output += 'PU' + x1.toFixed(2) + ',' + y1.toFixed(2) + ';\n';
   output += 'PD' + x2.toFixed(2) + ',' + y2.toFixed(2) + ';\n';
-  output += 'SP1;\n'
   return output;
 }
 
@@ -520,7 +538,7 @@ function getIntro() {
   var output = '';
   output += 'IN;\n'; // initialize
   output += 'IP0,0,16158,11040;\n'; // set the work area
-  output += 'VS5;\n'; // set pen speed (1 to 128)
+  output += 'VS8;\n'; // set pen speed (1 to 128)
   output += 'SP1;\n'; // select pen 1
 
   return output;
