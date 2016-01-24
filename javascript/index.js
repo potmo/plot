@@ -10,16 +10,16 @@ function plot() {
   var output = [];
   output.pushAll(getIntro());
 
-  output.pushAll( rasterizeImage(45, 4, image, sampleCyan)); // blue
-  output.pushAll( rasterizeImage(75, 1, image, sampleLuminocity)); // black
-  output.pushAll( rasterizeImage(15, 2, image, sampleMagenta)); // red
+  output.pushAll( rasterizeImage(45, 4,image, sampleCyan, 1-1/3)); // blue
+  output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity, 1-2/3)); // black
+  output.pushAll( rasterizeImage(15, 2,image, sampleMagenta, 1-3/3)); // red
 
   output.pushAll( getOutro() );
   printOutputToFile(output, '../output.hpgl');
 }
 
 
-function rasterizeImage(rotation, color, image, sample) {
+function rasterizeImage(rotation, color, image, sample, offsetted) {
 
   var debug = false;
   var output = [];
@@ -30,8 +30,15 @@ function rasterizeImage(rotation, color, image, sample) {
   var outputHeight = 10000;//11040;
 
   var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
-  var horizontalSlices = 4;
-  var verticalSlices = 2;
+
+
+  var paintRectangleWidth = image.width * scale;
+  var paintRectangleHeight = image.height * scale;
+
+  //output.pushAll(drawRectangle(0,0, paintRectangleWidth, paintRectangleHeight));
+
+  var horizontalSlices = 60;
+  var verticalSlices = 60;
 
   var amplitudeGain = 2.0;
 
@@ -41,25 +48,30 @@ function rasterizeImage(rotation, color, image, sample) {
       var relativeX = sliceX / horizontalSlices;
       var relativeY = sliceY / verticalSlices;
 
+      var frequencyLength = (image.width / horizontalSlices);
+      var amplitudeHeight = (image.height / verticalSlices);
+
       var sampleX = image.width * relativeX;
-      var sampleY = image.height * relativeY;
+      var sampleY = image.height * relativeY + offsetted * amplitudeHeight;
 
       var stength = sample(image, sampleX, sampleY);
 
-      var x = sampleX * scale;
-      var y = sampleY * scale;
-
-      var ocilationsPerSlice = 1;// + Math.round(stength * 4);
-
-      var frequencyLength = (image.width / horizontalSlices) * scale;
-      var amplitudeHeight = (image.height / verticalSlices) * scale;
+      var ocilationsPerSlice = 1 + Math.round(stength * 4);
 
       var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
 
       for (var o = 0; o < ocilationsPerSlice; o++) {
         var subsliceStart = subsliceFrequencyLength * o;
-        positions.push({x: x + subsliceStart + subsliceFrequencyLength / 2, y: y - amplitudeHeight / 2 * stength * amplitudeGain});
-        positions.push({x: x + subsliceStart + subsliceFrequencyLength, y: y + amplitudeHeight / 2 * stength * amplitudeGain});
+
+        // sample again just for amplitude
+        var amplitudeStrength = sample(image, sampleX + subsliceStart + subsliceFrequencyLength / 2, sampleY);
+
+        var x0 = sampleX + subsliceStart + subsliceFrequencyLength / 2;
+        var y0 = sampleY - amplitudeHeight / 2 * amplitudeStrength * amplitudeGain;
+        var x1 = sampleX + subsliceStart + subsliceFrequencyLength;
+        var y1 = sampleY + amplitudeHeight / 2 * amplitudeStrength * amplitudeGain;
+        positions.push({x: x0 * scale, y: y0 * scale});
+        positions.push({x: x1 * scale, y: y1 * scale});
       }
 
     }
@@ -434,7 +446,25 @@ function drawRectangle(x, y, width, height) {
       x + width, y + height,
       x, y + height,
       x, y);
-  }
+}
+
+function drawRotatedRectangle(x, y, width, height, rotation) {
+  var ax = x;
+  var ay = y;
+  var bx = ax + cos(rotation) * height;
+  var by = ay + sin(rotation) * height;
+  var cx = bx + cos(rotation + 90) * width;
+  var cy = by + sin(rotation + 90) * width;
+  var dx = cx + cos(rotation + 180) * height;
+  var dy = cy + sin(rotation + 180) * height;
+
+  return []
+    .addCommand('PU', ax, ay)
+    .addCommand('PD', bx, by)
+    .addCommand('PD', cx, cy)
+    .addCommand('PD', dx, dy)
+    .addCommand('PD', ax, ay);
+}
 
 function drawCircle(x, y, radius) {
   return []
@@ -721,8 +751,6 @@ function getIndexFromCoordinate(imageData, x, y) {
 }
 
 function printOutputToFile(output, file) {
-
-  var cleanCommands = removeRedundantCommands(output);
 
   var hpgl = commandsToHPGL(output);
 
