@@ -24,7 +24,7 @@ function rasterizeImage(rotation, color, image, sample) {
   var debug = false;
   var output = [];
 
-  output.addCommand('SP', color);
+  output.addCommand('SP', color.toFixed(0));
 
   var outputWidth = 12000;//16158;
   var outputHeight = 10000;//11040;
@@ -185,7 +185,7 @@ function rasterizeLine(positions, color, debug) {
   .teeMap(function(slices){
     return slices
       .map(function(slice){
-        return drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 1);
+        return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 1);
       })
   })
 
@@ -193,14 +193,14 @@ function rasterizeLine(positions, color, debug) {
     return slices
       .collect(2)
       .map(function(slicePairs){
-        return drawLine(slicePairs[0].tangent2.x, slicePairs[0].tangent2.y, slicePairs[1].tangent2.x, slicePairs[1].tangent2.y);
+        return drawLineFromCurrentLocation(slicePairs[1].tangent2.x, slicePairs[1].tangent2.y);
       });
   })
 
   .teeMap(function(slices){
     return slices
       .map(function(slice){
-        return drawThreePointArc(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, -1);
+        return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, -1);
       })
   })
 
@@ -209,18 +209,25 @@ function rasterizeLine(positions, color, debug) {
       .dropFirst()
       .collect(2)
       .map(function(slicePairs){
-        return drawLine(slicePairs[0].tangent1.x, slicePairs[0].tangent1.y, slicePairs[1].tangent1.x, slicePairs[1].tangent1.y);
+        return drawLineFromCurrentLocation(slicePairs[1].tangent1.x, slicePairs[1].tangent1.y);
       })
   })
 
   .introspect(function(array){
     var commands = []
 
-  // 0 is the original slices (ignore it)
+  // 0 is the original slices
   // 1 is the top arc
   // 2 is right leg
   // 3 is the bottom arc
   // 4 is the left leg
+
+    // move the pen to the start position
+
+    commands.addCommand('PU', array[0][0].tangent1.x, array[0][0].tangent1.y);
+    commands.addCommand('PD');
+
+
     while(array[1].length >= 2 || array[2].length >= 1 || array[3].length >= 2 || array[4].length >= 1){
 
       if (array[1].length >= 2) {
@@ -337,7 +344,7 @@ Array.prototype.addCommand = function(name) {
   return this;
 }
 
-// like flat map. Take all elements of an array that contains 
+// like flat map. Take all elements of an array that contains
 // elements and return an array with all the elements elements concatenated
 // [[1,2], [3,4]] = [1,2,3,4]
 Array.prototype.explode = function() {
@@ -390,6 +397,17 @@ function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, directi
   return output;
 }
 
+function drawThreePointArcFromCurrentLocation(startX, startY, endX, endY, centerX, centerY, direction) {
+
+  var centerToStart = {x: startX - centerX, y: startY - centerY};
+  var centerToEnd = {x: endX - centerX, y: endY - centerY};
+
+  var arcDegrees = getAngleBetweenVectors(centerToStart, centerToEnd) * -1;
+
+  return []
+    .addCommand('AA', centerX, centerY, (arcDegrees * direction));
+}
+
 function drawRotatedBox(x, y, side, rotation) {
   var ax = x;
   var ay = y;
@@ -430,12 +448,16 @@ function drawLine(x1, y1, x2, y2) {
     .addCommand('PD', x2,  y2);
 }
 
+function drawLineFromCurrentLocation(x1, y1) {
+  return []
+    .addCommand('PD', x1,  y1);
+}
+
 function getIntro() {
   return []
     .addCommand('IN') // initialize
     .addCommand('IP', '0', '0', '16158', '11040') // set the work area
-    .addCommand('VS', '8') // set pen speed (1 to 128)
-    .addCommand('SP', '1'); // select pen 1
+    .addCommand('VS', '10'); // set pen speed (1 to 128)
 }
 
 function getOutro() {
@@ -700,6 +722,8 @@ function getIndexFromCoordinate(imageData, x, y) {
 
 function printOutputToFile(output, file) {
 
+  var cleanCommands = removeRedundantCommands(output);
+
   var hpgl = commandsToHPGL(output);
 
   fs.writeFile(__dirname + '/' + file, hpgl, function(err) {
@@ -710,12 +734,96 @@ function printOutputToFile(output, file) {
   });
 }
 
+
+
+function removeRedundantCommands(commands){
+  var state = { x: 0, y: 0, pressure: false, color: '0'};
+
+  // TODO: move sliding window with size 3 and filter those not doing anything
+  // the idea is to remove those just lifting the pen at the current
+  // position just to put it down on the same position in the command
+  // also removing unnessesary pen changes
+  var output = [];
+  for (var i=0; i < commands.length; i++){
+    var newState = getNewState(state, commands[i]);
+    console.log('%s moves to %s,%s with pen %s and color %s', commands[i].name, newState.x.toFixed(2), newState.y.toFixed(2), newState.pressure, newState.color);
+
+    if (newState.pressure) {
+      output.addCommand('PD', newState.x, newState.y)
+    }else{
+      output.addCommand('PU', newState.x, newState.y)
+    }
+
+    state = newState;
+  }
+
+
+
+  return output;
+
+}
+
+function getNewState(oldState, command){
+  switch(command.name) {
+    case 'IN': return oldState;
+    case 'IP': return oldState;
+    case 'VS': return oldState;
+    case 'SP': return getNewStateFromSP(oldState, command);
+    case 'PU': return getNewStateFromPU(oldState, command);
+    case 'PD': return getNewStateFromPD(oldState, command);
+    case 'AA': return getNewStateFromAA(oldState, command);
+    default: throw 'not handling ' + command.name;
+  }
+}
+
+function getNewStateFromSP(oldState, command) {
+  var newColor = command.args[0]
+  return { x: oldState.x, y: oldState.y, pressure: oldState.pressure, color: newColor};
+}
+
+function getNewStateFromPU(oldState, command) {
+  if (command.args.length > 0){
+    var newEndX = command.args[command.args.length-2];
+    var newEndY = command.args[command.args.length-1];
+    return { x: newEndX, y: newEndY, pressure: false, color: oldState.color};
+  }else{
+    return { x: oldState.x, y: oldState.y, pressure: false, color: oldState.color};
+  }
+}
+
+function getNewStateFromPD(oldState, command) {
+  if (command.args.length > 0){
+    var newEndX = command.args[command.args.length-2];
+    var newEndY = command.args[command.args.length-1];
+    return { x: newEndX, y: newEndY, pressure: true, color: oldState.color};
+  }else{
+    return { x: oldState.x, y: oldState.y, pressure: true, color: oldState.color};
+  }
+}
+
+function getNewStateFromAA(oldState, command) {
+
+  var start = {x: oldState.x, y: oldState.y};
+
+  var pivot = {x: command.args[0], y: command.args[1]};
+
+  var degrees = command.args[2];
+
+  var end = rotatePointAroundPoint(start, pivot, -degrees);
+
+  return { x: end.x, y: end.y, pressure: oldState.pressure, color: oldState.color};
+}
+
+function stateChanged(oldState, newState) {
+  return
+    oldState.x === newState.x &&
+    oldState.y === newState.y &&
+    oldState.pressure === newState.pressure &&
+    oldState.color === newState.color;
+}
+
 function commandsToHPGL(commands) {
   return commands.map(function(command) {
-
-    console.log(command);
-    console.log('');
-
     return command.name + command.args.map(function(arg) {
       if (typeof arg === 'number'){
         return arg.toFixed(2);
