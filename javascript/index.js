@@ -10,66 +10,118 @@ function plot() {
   var output = [];
   output.pushAll(getIntro());
 
-  output.pushAll( rasterizeImage(45, 4,image, sampleCyan, 1-1/3)); // blue
-  output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity, 1-2/3)); // black
-  output.pushAll( rasterizeImage(15, 2,image, sampleMagenta, 1-3/3)); // red
+  output.pushAll( rasterizeImage(15, 2,image, sampleMagenta)); // red
+  output.pushAll( rasterizeImage(45, 4,image, sampleCyan)); // blue
+  output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity)); // black
 
   output.pushAll( getOutro() );
   printOutputToFile(output, '../output.hpgl');
 }
 
 
-function rasterizeImage(rotation, color, image, sample, offsetted) {
+function rasterizeImage(rotation, color, image, sample) {
 
   var debug = false;
   var output = [];
 
   output.addCommand('SP', color.toFixed(0));
 
+  var maxOutputWidth = 16158;
+  var maxOutputHeight = 11040;
   var outputWidth = 12000;//16158;
   var outputHeight = 10000;//11040;
 
   var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
 
+  var paddingLeft = ((maxOutputWidth - outputWidth) / 2) / scale;
+  var paddingTop = ((maxOutputHeight - outputHeight)) / scale;
+
 
   var paintRectangleWidth = image.width * scale;
   var paintRectangleHeight = image.height * scale;
 
-  //output.pushAll(drawRectangle(0,0, paintRectangleWidth, paintRectangleHeight));
+  //output.pushAll(drawRectangle(0, 0, maxOutputWidth, maxOutputHeight));
+  //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, rotation));
+  //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, 0));
+  //output.pushAll(drawRectangle(0, 0, paintRectangleWidth, paintRectangleHeight));
 
-  var horizontalSlices = 60;
-  var verticalSlices = 60;
+  var horizontalSlices = 80;
+  var verticalSlices = 80;
 
   var amplitudeGain = 2.0;
 
-  for (var sliceY = 1; sliceY < verticalSlices; sliceY++){
+  var sideOfRotatedSquare = getSideLengthOfRotatedSquareInSquare(rotation, Math.max(image.width, image.height));
+
+  // TODO: Rotate the sampling point here instead
+  // and then just ignore all the sample points that are outside the area.
+
+  for (var sliceY = -verticalSlices; sliceY < verticalSlices * 2; sliceY++){
     var positions = [];
-    for (var sliceX = 0; sliceX < horizontalSlices; sliceX++){
+    for (var sliceX = -horizontalSlices; sliceX < horizontalSlices * 2; sliceX++){
       var relativeX = sliceX / horizontalSlices;
       var relativeY = sliceY / verticalSlices;
 
       var frequencyLength = (image.width / horizontalSlices);
       var amplitudeHeight = (image.height / verticalSlices);
 
-      var sampleX = image.width * relativeX;
-      var sampleY = image.height * relativeY + offsetted * amplitudeHeight;
 
-      var stength = sample(image, sampleX, sampleY);
+      var sampleHorizontalX = cos(rotation + 90) * image.width * relativeX;
+      var sampleHorizontalY = sin(rotation + 90) * image.width * relativeX;
 
-      var ocilationsPerSlice = 1 + Math.round(stength * 4);
+      var sampleVerticalX = cos(rotation) * image.height * relativeY;
+      var sampleVerticalY = sin(rotation) * image.height * relativeY;
+
+      var sampleX = sampleHorizontalX + sampleVerticalX;
+      var sampleY = sampleHorizontalY + sampleVerticalY;
+
+      if (sampleX < 0 || sampleX >= image.width || sampleY < 0 || sampleY >= image.height) {
+        // skip
+        continue;
+      }
+
+      var strength = sample(image, sampleX, sampleY);
+
+      var ocilationsPerSlice = 1 + Math.round(strength * 4);
 
       var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
 
-      for (var o = 0; o < ocilationsPerSlice; o++) {
-        var subsliceStart = subsliceFrequencyLength * o;
-
+      for (var ocilation = 0; ocilation < ocilationsPerSlice; ocilation++) {
         // sample again just for amplitude
-        var amplitudeStrength = sample(image, sampleX + subsliceStart + subsliceFrequencyLength / 2, sampleY);
+        var subsliceStart = subsliceFrequencyLength * ocilation;
 
-        var x0 = sampleX + subsliceStart + subsliceFrequencyLength / 2;
-        var y0 = sampleY - amplitudeHeight / 2 * amplitudeStrength * amplitudeGain;
-        var x1 = sampleX + subsliceStart + subsliceFrequencyLength;
-        var y1 = sampleY + amplitudeHeight / 2 * amplitudeStrength * amplitudeGain;
+        var subsliceOffsetXstart = cos(rotation + 90) * subsliceStart;
+        var subsliceOffsetYstart = sin(rotation + 90) * subsliceStart;
+
+        var subsliceOffsetXlength = cos(rotation + 90) * subsliceFrequencyLength;
+        var subsliceOffsetYlength = sin(rotation + 90) * subsliceFrequencyLength;
+
+        if (sampleX + subsliceOffsetXstart < 0 ||
+            sampleX + subsliceOffsetXstart >= image.width ||
+            sampleY + subsliceOffsetYstart < 0 ||
+            sampleY + subsliceOffsetYstart >= image.height) {
+          // skip
+          continue;
+        }
+
+        var amplitudeStrength = sample(image, sampleX + subsliceOffsetXstart, sampleY + subsliceOffsetYstart);
+
+        // avoid total flatline since that will generate undrawable circles
+        amplitudeStrength = Math.max(0.001, amplitudeStrength)
+
+        var positiveAmplitudeOffsetX = cos(rotation) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
+        var positiveAmplitudeOffsetY = sin(rotation) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
+
+        var negativeAmplitudeOffsetX = cos(rotation + 180) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
+        var negativeAmplitudeOffsetY = sin(rotation + 180) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
+
+        var x0 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength / 2 + negativeAmplitudeOffsetX;
+        var y0 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength / 2 + negativeAmplitudeOffsetY;
+        var x1 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength + positiveAmplitudeOffsetX;
+        var y1 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength + positiveAmplitudeOffsetY;
+
+        //var p0 = rotatePointAroundPoint({x: x0 * scale, y: y0 * scale}, {x:0, y:0}, rotation);
+        //var p1 = rotatePointAroundPoint({x: x1 * scale, y: y1 * scale}, {x:0, y:0}, rotation);
+
         positions.push({x: x0 * scale, y: y0 * scale});
         positions.push({x: x1 * scale, y: y1 * scale});
       }
@@ -85,6 +137,7 @@ function rasterizeImage(rotation, color, image, sample, offsetted) {
 }
 
 function rasterizeLine(positions, color, debug) {
+
   return positions
 
   // draw endpoints
@@ -108,11 +161,22 @@ function rasterizeLine(positions, color, debug) {
     v1 = vertices[1];
     v2 = vertices[2];
 
+    v(v0.x);
+    v(v0.y);
+    v(v1.x);
+    v(v1.y);
+    v(v2.x);
+    v(v2.y);
+
     //var height = getHeightOfTriangle(v0.x ,v0.y, v1.x, v1.y, v2.x, v2.y);
 
     var leg2Length = getDistance(v1.x, v1.y, v2.x, v2.y);
     var b = getDistance(v0.x, v0.y, v2.x, v2.y);
     var leg1Length = getDistance(v0.x, v0.y, v1.x, v1.y);
+
+    v(b)
+    v(leg1Length)
+    v(leg2Length)
 
     var longestLeg = Math.max(leg1Length, leg2Length);
 
@@ -128,9 +192,17 @@ function rasterizeLine(positions, color, debug) {
     //var height = getHeightOfTriangleFromSides(longestLeg,base,longestLeg);
     var height = getHeightOfTriangle(v0.x ,v0.y, v1.x, v1.y, v2.x, v2.y);
 
+    var height = Math.max(height, 10);
+
+    v(height)
+
     var width = getDistance(v0.x, v0.y, v2.x, v2.y);
 
+    v(width)
+
     var factor = Math.pow(width / height, 2) / 2 - 0.3;
+
+    v(factor)
 
     v0.x = v1.x + (v0.x - v1.x) * factor;
     v0.y = v1.y + (v0.y - v1.y) * factor;
@@ -154,9 +226,14 @@ function rasterizeLine(positions, color, debug) {
                                 vertices[1].x, vertices[1].y,
                                 vertices[2].x, vertices[2].y);
 
+    v(incenter.x)
+    v(incenter.y)
+
     var inradius = findIncenterRadius(vertices[0].x, vertices[0].y,
                                       vertices[1].x, vertices[1].y,
                                       vertices[2].x, vertices[2].y);
+
+    v(inradius)
 
     if (debug) output.pushAll( drawCircle(incenter.x, incenter.y, inradius) );
 
@@ -168,8 +245,14 @@ function rasterizeLine(positions, color, debug) {
     var dx = slice.incenter.x - slice.vertices[1].x;
     var dy = slice.incenter.y - slice.vertices[1].y;
     var dd = Math.sqrt(dx * dx + dy * dy);
-    var a = Math.asin(slice.inradius / dd);
+    var a = Math.asin(Math.min(1,slice.inradius / dd));
     var b = Math.atan2(dy, dx);
+
+    v(dx)
+    v(dy)
+    v(dd)
+    v(a)
+    v(b)
 
     var t1 = b - a
     var t2 = b + a
@@ -178,6 +261,13 @@ function rasterizeLine(positions, color, debug) {
 
     var tb = { x: slice.incenter.x + slice.inradius * -Math.sin(t2),
                y: slice.incenter.y + slice.inradius * Math.cos(t2) };
+
+    v(t1)
+    v(t2)
+    v(ta.x)
+    v(ta.y)
+    v(tb.x)
+    v(tb.y)
 
     if (debug) output.pushAll( drawCircle(ta.x, ta.y, 10) );
     if (debug) output.pushAll( drawCircle(tb.x, tb.y, 10) );
@@ -227,6 +317,8 @@ function rasterizeLine(positions, color, debug) {
 
   .introspect(function(array){
     var commands = []
+
+    if (array[0].length === 0) return commands;
 
   // 0 is the original slices
   // 1 is the top arc
@@ -411,6 +503,14 @@ function drawThreePointArc(startX, startY, endX, endY, centerX, centerY, directi
 
 function drawThreePointArcFromCurrentLocation(startX, startY, endX, endY, centerX, centerY, direction) {
 
+  v(startX)
+  v(startY)
+  v(endX)
+  v(endY)
+  v(centerX)
+  v(centerY)
+  v(direction)
+
   var centerToStart = {x: startX - centerX, y: startY - centerY};
   var centerToEnd = {x: endX - centerX, y: endY - centerY};
 
@@ -504,8 +604,8 @@ function flipPointVertically(point, pivot) {
 }
 
 function rotatePointAroundPoint(point, pivot, degrees) {
-  var s = sin(-degrees);
-  var c = cos(-degrees);
+  var s = sin(degrees + 90);
+  var c = cos(degrees + 90);
 
   // translate to origin
   var tx = point.x - pivot.x;
@@ -528,6 +628,8 @@ function rotatePointAroundPoint(point, pivot, degrees) {
 function getAngleBetweenVectors( vector1, vector2) {
   //var radians = Math.atan2(vector2.y - vector1.y, vector2.x - vector1.x);
   //return toDegrees(radians);
+
+  if (vector1.x === vector2.x && vector1.y === vector2.y) return 0;
 
   var normal1 = getNormalized(vector1);
   var normal2 = getNormalized(vector2);
@@ -589,16 +691,25 @@ function findIncenterRadius(Ax, Ay, Bx, By, Cx, Cy) {
   var a = getDistance(Bx, By, Cx, Cy);
   var b = getDistance(Ax, Ay, Cx, Cy);
   var c = getDistance(Ax, Ay, Bx, By);
+
+  v(a)
+  v(b)
+  v(c)
+
   var perimiter = a + b + c;
   var p = perimiter / 2;
 
   // herons formula
   // http://www.mathopenref.com/heronsformula.html
-  var area = Math.sqrt(p * (p - a) * (p - b) * (p - c));
+  var area = Math.sqrt(Math.abs(p * (p - a) * (p - b) * (p - c)));
+
+  v(area)
 
   //calculate the radius
   // http://www.mathopenref.com/triangleincircle.html
   var radius = (2 * area) / perimiter;
+
+  v(radius)
   return radius;
 }
 
@@ -893,5 +1004,13 @@ var sampleLuminocity = function(image, x, y){
 
   return 1.0 - luminocity / 255.0;
 }
+
+function v(a){
+  if(!isFinite(a)){
+    //throw "error";
+  }
+  return a;
+}
+
 
 plot();
