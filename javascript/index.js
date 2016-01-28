@@ -5,14 +5,19 @@ var Canvas = require('canvas'),
 
 function plot() {
   console.log("loading image")
-  var image = loadImage('../skeleton2.jpg')
+  var image = loadImage('../pine.jpg')
 
   var output = [];
   output.pushAll(getIntro());
 
-  output.pushAll( rasterizeImage(15, 2,image, sampleMagenta)); // red
-  output.pushAll( rasterizeImage(45, 4,image, sampleCyan)); // blue
-  output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity)); // black
+  output.pushAll( rasterizeImage(75, 2,image, sampleMagenta)); // red
+  output.pushAll( rasterizeImage(15, 4,image, sampleCyan)); // blue
+  output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
+
+
+  //output.pushAll( rasterizeImage(15, 1,image, sampleLuminocity)); // black
+  //output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
+  //output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity)); // black
 
   output.pushAll( getOutro() );
   printOutputToFile(output, '../output.hpgl');
@@ -45,8 +50,8 @@ function rasterizeImage(rotation, color, image, sample) {
   //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, 0));
   //output.pushAll(drawRectangle(0, 0, paintRectangleWidth, paintRectangleHeight));
 
-  var horizontalSlices = 80;
-  var verticalSlices = 80;
+  var horizontalSlices = 50;
+  var verticalSlices = 50;
 
   var amplitudeGain = 2.0;
 
@@ -55,9 +60,9 @@ function rasterizeImage(rotation, color, image, sample) {
   // TODO: Rotate the sampling point here instead
   // and then just ignore all the sample points that are outside the area.
 
-  for (var sliceY = -verticalSlices; sliceY < verticalSlices * 2; sliceY++){
+  for (var sliceY = -verticalSlices*2; sliceY < verticalSlices * 2; sliceY++){
     var positions = [];
-    for (var sliceX = -horizontalSlices; sliceX < horizontalSlices * 2; sliceX++){
+    for (var sliceX = -horizontalSlices*2; sliceX < horizontalSlices * 2; sliceX++){
       var relativeX = sliceX / horizontalSlices;
       var relativeY = sliceY / verticalSlices;
 
@@ -81,7 +86,7 @@ function rasterizeImage(rotation, color, image, sample) {
 
       var strength = sample(image, sampleX, sampleY);
 
-      var ocilationsPerSlice = 1 + Math.round(strength * 4);
+      var ocilationsPerSlice = 1 + Math.round(strength * 1);
 
       var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
 
@@ -119,11 +124,11 @@ function rasterizeImage(rotation, color, image, sample) {
         var x1 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength + positiveAmplitudeOffsetX;
         var y1 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength + positiveAmplitudeOffsetY;
 
-        //var p0 = rotatePointAroundPoint({x: x0 * scale, y: y0 * scale}, {x:0, y:0}, rotation);
-        //var p1 = rotatePointAroundPoint({x: x1 * scale, y: y1 * scale}, {x:0, y:0}, rotation);
+        var muted = amplitudeStrength < 0.05;
+        //muted = false;
 
-        positions.push({x: x0 * scale, y: y0 * scale});
-        positions.push({x: x1 * scale, y: y1 * scale});
+        positions.push({x: x0 * scale, y: y0 * scale, muted: muted});
+        positions.push({x: x1 * scale, y: y1 * scale, muted: muted});
       }
 
     }
@@ -151,7 +156,7 @@ function rasterizeLine(positions, color, debug) {
   // deep clone
   .map(function(vertices){
     return vertices.map(function(node){
-      return {x: node.x, y: node.y};
+      return {x: node.x, y: node.y, muted: node.muted};
     });
   })
 
@@ -233,11 +238,14 @@ function rasterizeLine(positions, color, debug) {
                                       vertices[1].x, vertices[1].y,
                                       vertices[2].x, vertices[2].y);
 
+
+    var muted = vertices[0].muted || vertices[1].muted || vertices[2].muted;
+
     v(inradius)
 
     if (debug) output.pushAll( drawCircle(incenter.x, incenter.y, inradius) );
 
-    return {vertices: vertices, incenter: incenter, inradius: inradius};
+    return {vertices: vertices, incenter: incenter, inradius: inradius, muted: muted};
   })
 
   // draw the tangents
@@ -277,7 +285,8 @@ function rasterizeLine(positions, color, debug) {
               incenter: slice.incenter,
               inradius: slice.inradius,
               tangent1: ta,
-              tangent2: tb
+              tangent2: tb,
+              muted: slice.muted
             };
 
   })
@@ -287,7 +296,11 @@ function rasterizeLine(positions, color, debug) {
   .teeMap(function(slices){
     return slices
       .map(function(slice){
-        return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 1);
+        if (slice.muted){
+          return drawLineFromCurrentLocation(slice.tangent2.x, slice.tangent2.y);
+        }else{
+          return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, 1);
+        }
       })
   })
 
@@ -302,7 +315,11 @@ function rasterizeLine(positions, color, debug) {
   .teeMap(function(slices){
     return slices
       .map(function(slice){
-        return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, -1);
+        if (slice.muted){
+          return drawLineFromCurrentLocation(slice.tangent1.x, slice.tangent1.y);
+        }else{
+          return drawThreePointArcFromCurrentLocation(slice.tangent1.x, slice.tangent1.y, slice.tangent2.x, slice.tangent2.y, slice.incenter.x, slice.incenter.y, -1);
+        }
       })
   })
 
@@ -315,6 +332,33 @@ function rasterizeLine(positions, color, debug) {
       })
   })
 
+  .teeMap(function(slices){
+    return slices.map(function(current, index, array) {
+      if (current.muted) {
+        if (index == 0) {
+          //return [].addCommand('PU');
+          return []; // this is the normal state at the beginning of a line
+        } else {
+          if (array[index - 1].muted) {
+            return []; //'nada';
+          } else {
+            return [].addCommand('PU');
+          }
+        }
+      } else {
+        if (index == 0) {
+          return [].addCommand('PD');
+        } else {
+          if (array[index - 1].muted) {
+            return [].addCommand('PD');
+          } else {
+            return [];//'nada';
+          }
+        }
+      }
+    });
+  })
+
   .introspect(function(array){
     var commands = []
 
@@ -325,14 +369,19 @@ function rasterizeLine(positions, color, debug) {
   // 2 is right leg
   // 3 is the bottom arc
   // 4 is the left leg
+  // 5 is extra pen positions
 
     // move the pen to the start position
 
     commands.addCommand('PU', array[0][0].tangent1.x, array[0][0].tangent1.y);
-    commands.addCommand('PD');
+    //commands.addCommand('PD');
 
 
-    while(array[1].length >= 2 || array[2].length >= 1 || array[3].length >= 2 || array[4].length >= 1){
+    while(array[1].length >= 2 || array[2].length >= 1 || array[3].length >= 2 || array[4].length >= 1 || array[5].length >= 1){
+
+      if (array[5].length >= 1) {
+        commands.pushAll(array[5].shift());
+      }
 
       if (array[1].length >= 2) {
         commands.pushAll(array[1].shift());
@@ -343,6 +392,7 @@ function rasterizeLine(positions, color, debug) {
         commands.pushAll(array[2].shift());
       }
 
+
       if (array[3].length >= 2){
         array[3].shift() // discard the uneven
         commands.pushAll(array[3].shift());
@@ -350,6 +400,10 @@ function rasterizeLine(positions, color, debug) {
 
       if (array[4].length >= 1){
         commands.pushAll(array[4].shift());
+      }
+
+      if (array[5].length >= 1) {
+        commands.pushAll(array[5].shift());
       }
 
     }
@@ -580,7 +634,7 @@ function drawLine(x1, y1, x2, y2) {
 
 function drawLineFromCurrentLocation(x1, y1) {
   return []
-    .addCommand('PD', x1,  y1);
+    .addCommand('PA', x1,  y1);
 }
 
 function getIntro() {
