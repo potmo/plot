@@ -10,17 +10,19 @@ function plot() {
   var output = [];
   output.pushAll(getIntro());
 
-  output.pushAll( rasterizeImage(75, 2,image, sampleMagenta)); // red
-  output.pushAll( rasterizeImage(15, 4,image, sampleCyan)); // blue
   output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
-
+  output.pushAll( rasterizeImage(15, 4,image, sampleCyan)); // blue
+  output.pushAll( rasterizeImage(75, 2,image, sampleMagenta)); // red
 
   //output.pushAll( rasterizeImage(15, 1,image, sampleLuminocity)); // black
   //output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
   //output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity)); // black
 
   output.pushAll( getOutro() );
-  printOutputToFile(output, '../output.hpgl');
+  var hpgl = commandsToHPGL(output);
+  var canvasJs = commandsToCanvas(output);
+  printOutputToFile(hpgl, '../output.hpgl');
+  printOutputToFile(canvasJs, '../canvas-draw/output.js');
 }
 
 
@@ -50,8 +52,8 @@ function rasterizeImage(rotation, color, image, sample) {
   //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, 0));
   //output.pushAll(drawRectangle(0, 0, paintRectangleWidth, paintRectangleHeight));
 
-  var horizontalSlices = 50;
-  var verticalSlices = 50;
+  var horizontalSlices = 120;
+  var verticalSlices = 120;
 
   var amplitudeGain = 2.0;
 
@@ -124,7 +126,7 @@ function rasterizeImage(rotation, color, image, sample) {
         var x1 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength + positiveAmplitudeOffsetX;
         var y1 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength + positiveAmplitudeOffsetY;
 
-        var muted = amplitudeStrength < 0.05;
+        var muted = amplitudeStrength < 0.01;
         //muted = false;
 
         positions.push({x: x0 * scale, y: y0 * scale, muted: muted});
@@ -917,9 +919,7 @@ function getIndexFromCoordinate(imageData, x, y) {
 
 function printOutputToFile(output, file) {
 
-  var hpgl = commandsToHPGL(output);
-
-  fs.writeFile(__dirname + '/' + file, hpgl, function(err) {
+  fs.writeFile(__dirname + '/' + file, output, function(err) {
     if(err) {
       return console.log(err);
     }
@@ -1025,6 +1025,174 @@ function commandsToHPGL(commands) {
       }
     }).join(',') + ';';
   }).join('\n');
+}
+
+function commandsToCanvas(commands){
+  var state = {penDown: false, x: 0, y: 0};
+  return commands.map(function(command){
+    var result;
+
+    switch(command.name) {
+      case 'IN':
+       result = getCanvasInitialize(command, state); // initialize
+       break;
+      case 'IP':
+       result = getCanvasWorkspace(command, state); // set workarea
+       break;
+      case 'VS':
+       result = ""; // set pen speed
+       break;
+      case 'SP':
+       result = getCanvasSelectPen(command, state); // select pen
+       break;
+      case 'PU':
+       result = getCanvasPenUp(command, state); // pen up
+       break;
+      case 'PD':
+       result = getCanvasPenDown(command, state); // pen down
+       break;
+      case 'AA':
+       result = getCanvasArc(command, state); // absolute arc
+       break;
+      case 'PA':
+       result = getCanvasPlotAbsolute(command, state); // plot absolute
+       break;
+      default: throw 'not handling ' + command.name;
+    }
+
+    state.penDown = result.penDown;
+    state.x = result.x;
+    state.y = result.y;
+    return result.commands;
+
+  }).join('\n');
+}
+
+function getCanvasInitialize(command, state) {
+  var commands = "var Canvas = require('canvas');\nvar Image = Canvas.Image;\nvar fs = require('fs');";
+  return {penDown: state.penDown, x: state.x, y: state.y, commands: commands};
+}
+
+function getCanvasWorkspace(command, state){
+  var width = command.args[2];
+  var height = command.args[3];
+
+  var commands = ["var scaleDown = 10.0;",
+  "var canvas = new Canvas("+width+" / scaleDown, "+height+" / scaleDown);",
+  "var ctx = canvas.getContext('2d');",
+  "ctx.scale(1 / scaleDown , 1 / scaleDown);",
+  "ctx.lineWidth = scaleDown;",
+  "ctx.antialias = 'subpixel';",
+  "ctx.scale(1, -1);",
+  "ctx.translate(0, -"+height+");",
+  "ctx.fillStyle = 'rgba(255,255,255,1.0)';",
+  "ctx.fillRect(0,0,"+width+","+height+");",
+  "ctx.globalCompositeOperation='multiply';",
+  "ctx.beginPath();"].join('\n');
+
+  return {penDown: state.penDown, x: state.x, y: state.y, commands: commands};
+}
+
+function getCanvasSelectPen(command, state){
+
+  var storokeEnd = "ctx.stroke();\n";
+  var strokeStart = "ctx.beginPath();\n";
+
+  if (command.args[0] == '1') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,1)';" + strokeStart;
+  }else if (command.args[0] == '2') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(255,0,0,1)';" + strokeStart;
+  }else if (command.args[0] == '4') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,255,1)';" + strokeStart;
+  }else if (command.args[0] == '0') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,0)';\nfs.writeFile('out.png', canvas.toBuffer());";
+  } else {
+    throw "color not known: " + command.args[0];
+  }
+
+  return {penDown: state.penDown, x: state.x, y: state.y, commands: commands};
+}
+
+function getCanvasPenUp(command, state){
+  var endx = state.x;
+  var endy = state.y;
+  var commands = command
+  .args
+  .slideOver(2).map(function(positions){
+    endx = positions[0];
+    endy = positions[1];
+    return "ctx.moveTo("+endx+","+endy+");"
+  }).join('\n');
+
+  return {penDown: false, x: endx, y: endy, commands: commands};
+
+}
+
+function getCanvasPenDown(command, state){
+  var endx = state.x;
+  var endy = state.y;
+  var commands =  command
+  .args
+  .slideOver(2).map(function(positions){
+    endx = positions[0];
+    endy = positions[1];
+    return "ctx.lineTo("+endx+","+endy+");"
+  }).join("\n");
+
+  return {penDown: true, x: endx, y: endy, commands: commands};
+}
+
+function getCanvasArc(command, state){
+  // TODO: implement
+  // centerx, centery, degrees
+  var centerX = command.args[0];
+  var centerY = command.args[1];
+  var arcDegrees = command.args[2];
+  var radius = getDistance(state.x, state.y, centerX, centerY);
+  var counterClockwise = false;
+  var startAngleDegrees = getAngleFromVector({x: state.x - centerX, y: state.y - centerY});
+
+  var arcRads = toRads(arcDegrees);
+
+  var subLines = [];
+  var x;
+  var y;
+  var arcSteps = 10;
+  for (var i = 0; i < arcSteps; i++){
+    x = centerX + cos(startAngleDegrees - arcDegrees / arcSteps * i) * radius;
+    y = centerY + sin(startAngleDegrees - arcDegrees / arcSteps * i) * radius;
+    if (state.penDown){
+      subLines.push("ctx.lineTo("+x+","+y+");//arc");
+    }else{
+      subLines.push("ctx.moveTo("+x+","+y+");//arc");
+    }
+  }
+
+  var commands = subLines.join('\n');
+
+  //var startAngle = toRads(startAngleDegrees);
+  //var endAngle = startAngle  + arcRads;
+//
+  //var commands = "ctx.arc(" + centerX + "," + centerY + "," + radius + ","+ startAngle + "," + endAngle + "," + counterClockwise + ");\n";
+  return {penDown: state.penDown, x: x, y: y, commands: commands};
+}
+
+function getCanvasPlotAbsolute(command, state){
+  var endx = state.x;
+  var endy = state.y;
+  var commands =  command
+  .args
+  .slideOver(2).map(function(positions){
+    endx = positions[0];
+    endy = positions[1];
+    if (state.penDown){
+      return "ctx.lineTo("+endx+","+endy+");"
+    }else{
+      return "ctx.moveTo("+endx+","+endy+");"
+    }
+  }).join("\n");
+
+  return {penDown: state.penDown, x: endx, y: endy, commands: commands};
 }
 
 var sample = function(image, x, y){
