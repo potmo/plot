@@ -5,18 +5,33 @@ var Canvas = require('canvas'),
 
 function plot() {
   console.log("loading image")
-  var image = loadImage('../pine.jpg')
+  var image = loadImage('../shipdive3.png')
 
   var output = [];
   output.pushAll(getIntro());
 
-  output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
-  output.pushAll( rasterizeImage(15, 4,image, sampleCyan)); // blue
-  output.pushAll( rasterizeImage(75, 2,image, sampleMagenta)); // red
+  var maxOutputWidth = 16158;
+  var maxOutputHeight = 11040;
+  var outputWidth = 12000;//16158;
+  var outputHeight = 10000;//11040;
 
-  //output.pushAll( rasterizeImage(15, 1,image, sampleLuminocity)); // black
-  //output.pushAll( rasterizeImage(45, 1,image, sampleLuminocity)); // black
-  //output.pushAll( rasterizeImage(75, 1,image, sampleLuminocity)); // black
+  var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
+
+  var paddingLeft = ((maxOutputWidth - outputWidth) / 2) + (outputWidth - image.width * scale)/2;
+  var paddingTop = ((maxOutputHeight - outputHeight) / 2) + (outputHeight - image.height * scale)/2;
+
+
+  //output.pushAll( rasterizeImage(15, 5, 30, 60, image, sampleCyan, paddingLeft, paddingTop, scale, 0.02)); // blue cyan
+  //output.pushAll( rasterizeImage(75, 6, 40, 60, image, sampleMagenta, paddingLeft, paddingTop, scale, 0.02)); // magenta red
+  output.pushAll( rasterizeImage( 0, 7, 20, 60, image, sampleYellow, paddingLeft, paddingTop, scale, 0.02)); // yellow
+  //output.pushAll( rasterizeImage(45, 8, 30, 40, image, sampleLuminocity, paddingLeft, paddingTop, scale, 0.1)); // black
+
+  //output.pushAll( rasterizeImage(45, 1, 300, 80, image, sampleLuminocity, paddingLeft, paddingTop, scale)); // red
+  //output.pushAll( rasterizeImage(15, 2, 40, 200, image, sampleCyan, paddingLeft, paddingTop, scale)); // black
+  //output.pushAll( rasterizeImage(75, 4, 40, 200, image, sampleMagenta, paddingLeft, paddingTop, scale)); // blue
+
+  //output.pushAll( drawRotatedRectangle((maxOutputWidth - outputWidth) / 2, (maxOutputHeight - outputHeight) / 2, outputWidth, outputHeight, 0) );
+  //output.pushAll( drawRotatedRectangle(0, 0, image.width * scale, image.height * scale, 0) );
 
   output.pushAll( getOutro() );
   var hpgl = commandsToHPGL(output);
@@ -26,36 +41,17 @@ function plot() {
 }
 
 
-function rasterizeImage(rotation, color, image, sample) {
+function rasterizeImage(rotation, color, horizontalSlices, verticalSlices, image, sample, paddingLeft, paddingTop, scale, muteThreshold) {
 
   var debug = false;
   var output = [];
 
   output.addCommand('SP', color.toFixed(0));
 
-  var maxOutputWidth = 16158;
-  var maxOutputHeight = 11040;
-  var outputWidth = 12000;//16158;
-  var outputHeight = 10000;//11040;
+  //var horizontalSlices = 90;
+  //var verticalSlices = 70;
 
-  var scale = Math.min(outputWidth / image.width, outputHeight / image.height);
-
-  var paddingLeft = ((maxOutputWidth - outputWidth) / 2) / scale;
-  var paddingTop = ((maxOutputHeight - outputHeight)) / scale;
-
-
-  var paintRectangleWidth = image.width * scale;
-  var paintRectangleHeight = image.height * scale;
-
-  //output.pushAll(drawRectangle(0, 0, maxOutputWidth, maxOutputHeight));
-  //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, rotation));
-  //output.pushAll(drawRotatedRectangle(paddingLeft * scale, paddingTop * scale , paintRectangleWidth, paintRectangleHeight, 0));
-  //output.pushAll(drawRectangle(0, 0, paintRectangleWidth, paintRectangleHeight));
-
-  var horizontalSlices = 120;
-  var verticalSlices = 120;
-
-  var amplitudeGain = 2.0;
+  var amplitudeGain = 0.9;
 
   var sideOfRotatedSquare = getSideLengthOfRotatedSquareInSquare(rotation, Math.max(image.width, image.height));
 
@@ -88,7 +84,7 @@ function rasterizeImage(rotation, color, image, sample) {
 
       var strength = sample(image, sampleX, sampleY);
 
-      var ocilationsPerSlice = 1 + Math.round(strength * 1);
+      var ocilationsPerSlice = 1 + Math.round(strength * 6);
 
       var subsliceFrequencyLength = frequencyLength / ocilationsPerSlice;
 
@@ -112,6 +108,13 @@ function rasterizeImage(rotation, color, image, sample) {
 
         var amplitudeStrength = sample(image, sampleX + subsliceOffsetXstart, sampleY + subsliceOffsetYstart);
 
+        //amplitudeStrength = amplitudeStrength * amplitudeStrength;
+        //amplitudeStrength = 0.02 + amplitudeStrength * 0.98;
+
+        //amplitudeStrength = 1.0 - Math.pow(2, amplitudeStrength * 2) / 4;
+
+        var muted = amplitudeStrength < muteThreshold;
+
         // avoid total flatline since that will generate undrawable circles
         amplitudeStrength = Math.max(0.001, amplitudeStrength)
 
@@ -121,16 +124,16 @@ function rasterizeImage(rotation, color, image, sample) {
         var negativeAmplitudeOffsetX = cos(rotation + 180) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
         var negativeAmplitudeOffsetY = sin(rotation + 180) * (amplitudeHeight / 2 * amplitudeStrength * amplitudeGain);
 
-        var x0 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength / 2 + negativeAmplitudeOffsetX;
-        var y0 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength / 2 + negativeAmplitudeOffsetY;
-        var x1 = paddingLeft  + sampleX + subsliceOffsetXstart + subsliceOffsetXlength + positiveAmplitudeOffsetX;
-        var y1 = paddingTop   + sampleY + subsliceOffsetYstart + subsliceOffsetYlength + positiveAmplitudeOffsetY;
+        var x0 = /*paddingLeft  +*/ sampleX + subsliceOffsetXstart + subsliceOffsetXlength / 2 + negativeAmplitudeOffsetX;
+        var y0 = /*paddingTop   +*/ sampleY + subsliceOffsetYstart + subsliceOffsetYlength / 2 + negativeAmplitudeOffsetY;
+        var x1 = /*paddingLeft  +*/ sampleX + subsliceOffsetXstart + subsliceOffsetXlength + positiveAmplitudeOffsetX;
+        var y1 = /*paddingTop   +*/ sampleY + subsliceOffsetYstart + subsliceOffsetYlength + positiveAmplitudeOffsetY;
 
-        var muted = amplitudeStrength < 0.01;
+
         //muted = false;
 
-        positions.push({x: x0 * scale, y: y0 * scale, muted: muted});
-        positions.push({x: x1 * scale, y: y1 * scale, muted: muted});
+        positions.push({x: paddingLeft + x0 * scale, y: paddingTop + y0 * scale, muted: muted});
+        positions.push({x: paddingLeft + x1 * scale, y: paddingTop + y1 * scale, muted: muted});
       }
 
     }
@@ -292,6 +295,22 @@ function rasterizeLine(positions, color, debug) {
             };
 
   })
+
+  // remove muted slices with muted slices on both sides
+  .map(function(current, index, array){
+
+    if ( index == 0) return current;
+    if ( index == array.length - 1) return current;
+
+    if (array[index + 1].muted && array[index - 1].muted && array[index].muted){
+      return null;
+    }
+    return current;
+
+  })
+
+  // filter away those that returned null in above map
+  .filter(Boolean)
 
   .wrap()
 
@@ -643,7 +662,7 @@ function getIntro() {
   return []
     .addCommand('IN') // initialize
     .addCommand('IP', '0', '0', '16158', '11040') // set the work area
-    .addCommand('VS', '10'); // set pen speed (1 to 128)
+    .addCommand('VS', '127'); // set pen speed (1 to 128)
 }
 
 function getOutro() {
@@ -1081,7 +1100,7 @@ function getCanvasWorkspace(command, state){
   "var canvas = new Canvas("+width+" / scaleDown, "+height+" / scaleDown);",
   "var ctx = canvas.getContext('2d');",
   "ctx.scale(1 / scaleDown , 1 / scaleDown);",
-  "ctx.lineWidth = scaleDown;",
+  "ctx.lineWidth = scaleDown * 1.5;",
   "ctx.antialias = 'subpixel';",
   "ctx.scale(1, -1);",
   "ctx.translate(0, -"+height+");",
@@ -1098,14 +1117,24 @@ function getCanvasSelectPen(command, state){
   var storokeEnd = "ctx.stroke();\n";
   var strokeStart = "ctx.beginPath();\n";
 
-  if (command.args[0] == '1') {
+  if (command.args[0] == '0') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,0)';\nfs.writeFile('out.png', canvas.toBuffer());";
+  } else if (command.args[0] == '1') {
     commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,1)';" + strokeStart;
   }else if (command.args[0] == '2') {
     commands = storokeEnd + "ctx.strokeStyle = 'rgba(255,0,0,1)';" + strokeStart;
   }else if (command.args[0] == '4') {
     commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,255,1)';" + strokeStart;
-  }else if (command.args[0] == '0') {
-    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,0)';\nfs.writeFile('out.png', canvas.toBuffer());";
+  }else if (command.args[0] == '3') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(255,225,0,1)';" + strokeStart;
+  }else if (command.args[0] == '5') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,140,255,1)';" + strokeStart; // cyan
+  }else if (command.args[0] == '6') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(212,0,255,1)';" + strokeStart; // magenta
+  }else if (command.args[0] == '7') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(255,238,0,1)';" + strokeStart; // yellow
+  }else if (command.args[0] == '8') {
+    commands = storokeEnd + "ctx.strokeStyle = 'rgba(0,0,0,1)';" + strokeStart; // black
   } else {
     throw "color not known: " + command.args[0];
   }
@@ -1216,6 +1245,11 @@ var sampleBlack = function(image, x, y){
 var sampleMagenta = function(image, x, y){
   var cmyk = sample(image, x, y);
   return cmyk.m;
+}
+
+var sampleYellow = function(image, x, y){
+  var cmyk = sample(image, x, y);
+  return cmyk.y;
 }
 
 var sampleLuminocity = function(image, x, y){
